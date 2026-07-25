@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useAssetConfigContext } from "@/components/providers/AssetConfigProvider";
 import { useDistributionRecords } from "@/hooks/useDistributionRecords";
+import { HoldingsSummarySection } from "@/components/dashboard/HoldingsSummarySection";
 import { summarizeByCurrency } from "@/lib/holdings";
 import { yearOf, sumByMonth } from "@/lib/aggregate";
 import type { DistributionCategory, DistributionRecord } from "@/lib/types";
@@ -45,21 +46,6 @@ function krw(n: number) {
   return `₩${Math.round(n).toLocaleString()}`;
 }
 
-function topTickerFor(records: DistributionRecord[]) {
-  const map = new Map<string, number>();
-  for (const r of records) {
-    map.set(r.ticker, (map.get(r.ticker) ?? 0) + r.distributionReceived);
-  }
-  let best = "";
-  let bestVal = -1;
-  for (const [t, v] of map.entries()) {
-    if (v > bestVal) {
-      best = t;
-      bestVal = v;
-    }
-  }
-  return best;
-}
 
 export function DashboardView() {
   const { data: assetConfig } = useAssetConfigContext();
@@ -172,25 +158,34 @@ export function DashboardView() {
     });
   }, [effectiveYear, monthlyMaps]);
 
-  const comboCharts = useMemo(
-    () =>
-      (["special", "general"] as DistributionCategory[]).map((cat) => {
-        const records = byCategory[cat].filter(
-          (r) => yearOf(r.date) === effectiveYear
-        );
-        const ticker = topTickerFor(records);
+  const comboCharts = useMemo(() => {
+    // rule: 계좌별로 분배금을 수령한 종목 중, 선택된 연도 데이터 기준 최신 상태가
+    // '보유'인 종목만 차트로 보여준다 (매도된 종목은 제외)
+    return (["special", "general", "tax-free"] as DistributionCategory[]).flatMap((cat) => {
+      const records = byCategory[cat].filter((r) => yearOf(r.date) === effectiveYear);
+
+      const latestByTicker = new Map<string, DistributionRecord>();
+      for (const r of records) {
+        const cur = latestByTicker.get(r.ticker);
+        if (!cur || cur.date < r.date) latestByTicker.set(r.ticker, r);
+      }
+      const heldTickers = [...latestByTicker.entries()]
+        .filter(([, r]) => r.held)
+        .map(([ticker]) => ticker);
+
+      return heldTickers.map((ticker) => {
         const points = records
           .filter((r) => r.ticker === ticker)
           .sort((a, b) => (a.date < b.date ? -1 : 1))
           .map((r) => ({
             date: r.date,
-            distribution: r.total,
+            distribution: r.distribution,
             price: r.price,
           }));
         return { cat, ticker, points };
-      }),
-    [byCategory, effectiveYear]
-  );
+      });
+    });
+  }, [byCategory, effectiveYear]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
@@ -414,42 +409,60 @@ export function DashboardView() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {comboCharts.map(({ cat, ticker, points }) => (
-          <Card key={cat}>
-            <CardHeader>
-              <CardTitle className="text-sm">
-                {ticker || "데이터 없음"} · {CATEGORY_LABEL[cat]}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={points}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" fontSize={10} />
-                  <YAxis yAxisId="left" fontSize={11} />
-                  <YAxis yAxisId="right" orientation="right" fontSize={11} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar
-                    yAxisId="left"
-                    dataKey="distribution"
-                    name="분배금"
-                    fill={CATEGORY_COLOR[cat]}
-                  />
-                  <Line
-                    yAxisId="right"
-                    type="monotone"
-                    dataKey="price"
-                    name="주가"
-                    stroke="#f97316"
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">주가등락 및 분배금 등락 현황</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {comboCharts.map(({ cat, ticker, points }) => (
+              <div key={`${cat}-${ticker}`} className="rounded-lg border p-4">
+                <p className="mb-2 text-sm">
+                  <span className="font-bold text-neutral-900">
+                    {ticker || "데이터 없음"}
+                  </span>
+                  <span style={{ color: CATEGORY_COLOR[cat] }}> - {CATEGORY_LABEL[cat]}</span>
+                </p>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={points}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="date"
+                        fontSize={10}
+                        tickFormatter={(d: string) => d.slice(5).replace("-", "/")}
+                      />
+                      <YAxis yAxisId="left" fontSize={11} />
+                      <YAxis yAxisId="right" orientation="right" fontSize={11} />
+                      <Tooltip />
+                      <Legend />
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="price"
+                        name="주가"
+                        stroke="#312e81"
+                        dot={{ r: 4, fill: "#fff", stroke: "#312e81", strokeWidth: 2 }}
+                      />
+                      <Bar
+                        yAxisId="right"
+                        dataKey="distribution"
+                        name="주당 분배금"
+                        fill="#f97316"
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <HoldingsSummarySection
+        holdings={assetConfig.holdings}
+        exchangeRate={assetConfig.exchangeRate.rate}
+      />
     </div>
   );
 }

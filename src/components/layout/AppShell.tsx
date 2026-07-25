@@ -12,6 +12,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { ScrollToTopButton } from "@/components/layout/ScrollToTopButton";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -74,6 +75,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
 
       <main className="flex-1 pb-20 md:pb-0">{children}</main>
+
+      <ScrollToTopButton />
 
       <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t bg-white pb-[env(safe-area-inset-bottom)] md:hidden">
         {NAV_ITEMS.map((item) => {

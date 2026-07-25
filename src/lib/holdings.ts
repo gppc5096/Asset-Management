@@ -147,6 +147,91 @@ export function netPositions(holdings: Holding[]): NetPosition[] {
     }));
 }
 
+export type HoldingSummaryGroupBy = "account" | "ticker";
+
+export type HoldingSummary = {
+  key: string;
+  ticker: string;
+  accountNumber: string; // "종목별"로 여러 계좌가 합쳐지면 "-"
+  accountType: string; // 합쳐진 값이 서로 다르면 "-"
+  broker: string; // 합쳐진 값이 서로 다르면 "-"
+  distributionCycle: string; // 합쳐진 값이 서로 다르면 "-"
+  country: Holding["country"];
+  netQuantity: number;
+  avgUnitPrice: number; // 매수 거래 가중평균 단가 (원가 기준)
+  totalBuyAmount: number; // avgUnitPrice × netQuantity, 보유통화 기준
+};
+
+/**
+ * '현재 보유 종목 현황' 섹션 전용 집계.
+ * groupBy="account": 종목+계좌번호 단위 (자산관리 원장의 실제 행 단위)
+ * groupBy="ticker": 같은 종목을 여러 계좌에 걸쳐 1행으로 합산
+ */
+export function currentHoldingsSummary(
+  holdings: Holding[],
+  groupBy: HoldingSummaryGroupBy
+): HoldingSummary[] {
+  type Bucket = {
+    buyQty: number;
+    buyAmount: number;
+    sellQty: number;
+    accountNumbers: Set<string>;
+    accountTypes: Set<string>;
+    brokers: Set<string>;
+    distributionCycles: Set<string>;
+    country: Holding["country"];
+    ticker: string;
+  };
+  const map = new Map<string, Bucket>();
+  for (const h of holdings) {
+    const key = groupBy === "account" ? `${h.ticker}__${h.accountNumber}` : h.ticker;
+    const b = map.get(key) ?? {
+      buyQty: 0,
+      buyAmount: 0,
+      sellQty: 0,
+      accountNumbers: new Set<string>(),
+      accountTypes: new Set<string>(),
+      brokers: new Set<string>(),
+      distributionCycles: new Set<string>(),
+      country: h.country,
+      ticker: h.ticker,
+    };
+    if (h.tradeType === "매도") {
+      b.sellQty += h.quantity;
+    } else {
+      b.buyQty += h.quantity;
+      b.buyAmount += h.unitPrice * h.quantity;
+    }
+    b.accountNumbers.add(h.accountNumber);
+    b.accountTypes.add(h.accountType);
+    b.brokers.add(h.broker);
+    b.distributionCycles.add(h.distributionCycle);
+    map.set(key, b);
+  }
+
+  const single = (s: Set<string>) => (s.size === 1 ? [...s][0] : "-");
+
+  return [...map.entries()]
+    .map(([key, b]) => {
+      const netQuantity = b.buyQty - b.sellQty;
+      const avgUnitPrice = b.buyQty > 0 ? b.buyAmount / b.buyQty : 0;
+      return {
+        key,
+        ticker: b.ticker,
+        accountNumber: single(b.accountNumbers),
+        accountType: single(b.accountTypes),
+        broker: single(b.brokers),
+        distributionCycle: single(b.distributionCycles),
+        country: b.country,
+        netQuantity,
+        avgUnitPrice,
+        totalBuyAmount: avgUnitPrice * netQuantity,
+      };
+    })
+    .filter((p) => p.netQuantity > 0)
+    .sort((a, b) => b.totalBuyAmount - a.totalBuyAmount);
+}
+
 export function summarizeByCurrency(
   holdings: Holding[],
   cash: Cash,
