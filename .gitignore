@@ -50,6 +50,9 @@ firebase-debug.log
 # personal screenshots showing real asset amounts
 /docs/screenshot/
 
+# original CSV exports containing real financial data (holdings, dividends, account numbers)
+/docs/csv-data/
+
 # local agent tooling state, not app source
 /.omc/
 /.opencode/

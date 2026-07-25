@@ -42,6 +42,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
@@ -52,18 +53,28 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { useDistributionRecords } from "@/hooks/useDistributionRecords";
-import { computeDistributionAmounts } from "@/lib/tax";
+import {
+  computeDistributionAmounts,
+  distributionRecordsToCsv,
+  parseDistributionCsv,
+} from "@/lib/tax";
 import { monthKey } from "@/lib/aggregate";
 import { db } from "@/lib/firebaseConfig";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { isDistributionDoc } from "@/lib/validate";
 import { localDateString } from "@/lib/date";
-import type { DistributionCategory, DistributionRecord } from "@/lib/types";
+import type { DistributionCategory, DistributionDoc, DistributionRecord } from "@/lib/types";
 
 type Props = {
   category: DistributionCategory;
   title: string;
   subtitle: string;
+};
+
+const CATEGORY_LABEL: Record<DistributionCategory, string> = {
+  special: "특별계좌",
+  general: "일반계좌",
+  "tax-free": "비과세계좌",
 };
 
 const TICKER_COLORS = [
@@ -113,6 +124,11 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
   const [endMonth, setEndMonth] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [pendingImport, setPendingImport] = useState<DistributionRecord[] | null>(null);
+  const [pendingRestore, setPendingRestore] = useState<{ id: string; data: DistributionDoc } | null>(
+    null
+  );
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
 
   const months = useMemo(() => {
@@ -151,7 +167,8 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
       const cur = map.get(r.ticker);
       if (!cur || cur.date < r.date) map.set(r.ticker, r);
     }
-    return [...map.values()];
+    // 종목별 최신 기록이 매도(보유여부="무")면 더 이상 보유 중이 아니므로 합계에서 제외
+    return [...map.values()].filter((r) => r.held);
   }, [filtered]);
 
   const totalQuantity = latestPerTicker.reduce((a, r) => a + r.quantity, 0);
@@ -304,13 +321,12 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
   }
 
   function handleExport() {
-    const blob = new Blob([JSON.stringify(data, null, 2)], {
-      type: "application/json",
-    });
+    const csv = distributionRecordsToCsv(data.records);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${category}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `${localDateString()}-${CATEGORY_LABEL[category]}_내보내기.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -318,38 +334,37 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
   function handleImport() {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "application/json";
+    input.accept = ".csv,text/csv";
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
       const text = await file.text();
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        toast.error("파일 형식이 올바르지 않습니다");
+      const records = parseDistributionCsv(text, category);
+      if (!records) {
+        toast.error(
+          "CSV 형식이 올바르지 않습니다 (거래일,종목명,주식수량,현주가,분배금,과세표준,보유여부 헤더 필요)"
+        );
         return;
       }
-      if (!isDistributionDoc(parsed)) {
-        toast.error("분배금 데이터 형식이 올바르지 않습니다 (records 필요)");
+      if (records.length === 0) {
+        toast.error("가져올 수 있는 유효한 행이 없습니다");
         return;
       }
-      if (
-        !confirm(
-          `현재 ${data.records.length}건을 가져온 ${parsed.records.length}건으로 교체합니다. 계속할까요?`
-        )
-      ) {
-        return;
-      }
-      await save({ ...parsed, updatedAt: new Date().toISOString() });
-      toast.success("가져오기 완료");
+      setPendingImport(records);
     };
     input.click();
   }
 
+  async function confirmImport() {
+    if (!pendingImport) return;
+    await save({ ...data, records: pendingImport, updatedAt: new Date().toISOString() });
+    setPendingImport(null);
+    toast.success("가져오기 완료");
+  }
+
   async function handleReset() {
-    if (!confirm("전체 데이터를 초기화할까요? 되돌릴 수 없습니다.")) return;
     await save({ records: [], updatedAt: new Date().toISOString() });
+    setResetDialogOpen(false);
     toast.success("초기화되었습니다");
   }
 
@@ -357,7 +372,9 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
     if (!user) return;
     const backupId = `${category}-backup-${new Date().toISOString()}`;
     await setDoc(doc(db, "users", user.uid, "backups", backupId), data);
-    toast.success("클라우드에 백업되었습니다");
+    toast.success("클라우드에 백업되었습니다", {
+      style: { background: "#c4f5e4" },
+    });
   }
 
   async function handleCloudRestore() {
@@ -376,9 +393,16 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
       toast.error("백업 데이터 형식이 올바르지 않습니다");
       return;
     }
-    if (!confirm(`가장 최근 백업(${latest.id})으로 복원할까요?`)) return;
-    await save(latestData);
-    toast.success("복원되었습니다");
+    setPendingRestore({ id: latest.id, data: latestData });
+  }
+
+  async function confirmRestore() {
+    if (!pendingRestore) return;
+    await save(pendingRestore.data);
+    setPendingRestore(null);
+    toast.success("복원되었습니다", {
+      style: { background: "#c4f5e4" },
+    });
   }
 
   return (
@@ -434,7 +458,7 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold">{totalQuantity.toLocaleString()} 주</p>
-            <p className="text-xs text-neutral-400">* 종목별 최신 데이터 기준</p>
+            <p className="text-xs text-neutral-400">* 종목별 최신 데이터 기준, 보유중인 종목만</p>
           </CardContent>
         </Card>
         <Card>
@@ -472,7 +496,12 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
         <Button variant="outline" size="sm" onClick={() => void handleCloudRestore()} disabled={loading}>
           <CloudDownload className="mr-1 h-4 w-4" /> 클라우드 복원
         </Button>
-        <Button variant="outline" size="sm" onClick={() => void handleReset()} disabled={loading}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setResetDialogOpen(true)}
+          disabled={loading}
+        >
           <RotateCcw className="mr-1 h-4 w-4" /> 초기화
         </Button>
         <Button size="sm" onClick={openAdd} className="ml-auto" disabled={loading}>
@@ -739,6 +768,68 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
           </div>
           <DialogFooter>
             <Button onClick={() => void handleSubmit()}>저장</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>전체 데이터 초기화</DialogTitle>
+            <DialogDescription>
+              {title}의 모든 분배금 기록이 삭제됩니다. 이 작업은 되돌릴 수 없습니다. 계속할까요?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetDialogOpen(false)}>
+              취소
+            </Button>
+            <Button variant="destructive" onClick={() => void handleReset()}>
+              초기화
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={pendingImport !== null} onOpenChange={(open) => !open && setPendingImport(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>가져오기 확인</DialogTitle>
+            <DialogDescription>
+              현재 {data.records.length}건을 가져온 {pendingImport?.length ?? 0}건으로
+              교체합니다. 이 작업은 되돌릴 수 없습니다. 계속할까요?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingImport(null)}>
+              취소
+            </Button>
+            <Button variant="destructive" onClick={() => void confirmImport()}>
+              가져오기
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pendingRestore !== null}
+        onOpenChange={(open) => !open && setPendingRestore(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>클라우드 복원 확인</DialogTitle>
+            <DialogDescription>
+              가장 최근 백업({pendingRestore?.id})으로 현재 데이터를 덮어씁니다. 이 작업은
+              되돌릴 수 없습니다. 계속할까요?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingRestore(null)}>
+              취소
+            </Button>
+            <Button variant="destructive" onClick={() => void confirmRestore()}>
+              복원
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

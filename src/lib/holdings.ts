@@ -1,4 +1,106 @@
-import type { Cash, ExchangeRate, Holding } from "@/lib/types";
+import { toCsv, parseCsv, csvRowsToRecords } from "@/lib/csv";
+import {
+  ACCOUNT_TYPES,
+  ASSET_TYPES,
+  COUNTRIES,
+  TRADE_TYPES,
+  DISTRIBUTION_CYCLES,
+  type Cash,
+  type ExchangeRate,
+  type Holding,
+} from "@/lib/types";
+
+const HOLDINGS_CSV_HEADERS = [
+  "주식구분",
+  "국가",
+  "거래일",
+  "증권사",
+  "종목명",
+  "계좌번호",
+  "계좌유형",
+  "거래유형",
+  "분배주기",
+  "매입단가",
+  "수량",
+  "매수금액",
+  "매도금액",
+  "적용환율",
+] as const;
+
+/** 원본 앱의 '자산관리 내보내기' CSV와 동일한 컬럼 구조 (id는 내부 전용이라 미포함). */
+export function holdingsToCsv(holdings: Holding[]): string {
+  const rows = holdings.map((h) => [
+    h.assetType,
+    h.country,
+    h.date,
+    h.broker,
+    h.ticker,
+    h.accountNumber,
+    h.accountType,
+    h.tradeType,
+    h.distributionCycle,
+    h.unitPrice,
+    h.quantity,
+    h.buyAmount,
+    h.sellAmount,
+    h.appliedRate,
+  ]);
+  return toCsv([...HOLDINGS_CSV_HEADERS], rows);
+}
+
+export function parseHoldingsCsv(text: string): Holding[] | null {
+  const rows = parseCsv(text);
+  if (rows.length === 0) return null;
+  const header = rows[0].map((h) => h.trim());
+  const hasAllHeaders = HOLDINGS_CSV_HEADERS.every((h) => header.includes(h));
+  if (!hasAllHeaders) return null;
+
+  const records = csvRowsToRecords(rows);
+  const holdings: Holding[] = [];
+  for (const r of records) {
+    const assetType = r["주식구분"];
+    const country = r["국가"];
+    const accountType = r["계좌유형"];
+    const tradeType = r["거래유형"];
+    const distributionCycle = r["분배주기"] || "없음";
+    const quantity = Number(r["수량"]);
+    const unitPrice = Number(r["매입단가"]);
+    const buyAmount = Number(r["매수금액"] || 0);
+    const sellAmount = Number(r["매도금액"] || 0);
+    const appliedRate = Number(r["적용환율"] || 0);
+
+    const isValid =
+      (ASSET_TYPES as readonly string[]).includes(assetType) &&
+      (COUNTRIES as readonly string[]).includes(country) &&
+      (ACCOUNT_TYPES as readonly string[]).includes(accountType) &&
+      (TRADE_TYPES as readonly string[]).includes(tradeType) &&
+      (DISTRIBUTION_CYCLES as readonly string[]).includes(distributionCycle) &&
+      r["종목명"] &&
+      r["거래일"] &&
+      Number.isFinite(quantity) &&
+      Number.isFinite(unitPrice);
+    if (!isValid) continue;
+
+    holdings.push({
+      id: crypto.randomUUID(),
+      ticker: r["종목명"],
+      date: r["거래일"],
+      broker: r["증권사"] ?? "",
+      accountNumber: r["계좌번호"] ?? "",
+      accountType: accountType as Holding["accountType"],
+      assetType: assetType as Holding["assetType"],
+      country: country as Holding["country"],
+      tradeType: tradeType as Holding["tradeType"],
+      quantity,
+      unitPrice,
+      buyAmount,
+      sellAmount,
+      appliedRate,
+      distributionCycle: distributionCycle as Holding["distributionCycle"],
+    });
+  }
+  return holdings;
+}
 
 export type NetPosition = {
   ticker: string;

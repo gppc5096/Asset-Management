@@ -1,14 +1,23 @@
-export type AccountType =
-  | "일반계좌"
-  | "특별계좌"
-  | "비과세저축계좌"
-  | "ISA"
-  | "연금저축계좌";
+export const ACCOUNT_TYPES = [
+  "일반계좌",
+  "특별계좌",
+  "비과세저축계좌",
+  "ISA",
+  "연금저축계좌",
+] as const;
+export type AccountType = (typeof ACCOUNT_TYPES)[number];
 
-export type AssetType = "개별주식" | "ETF주식";
-export type Country = "KOR" | "USA";
-export type TradeType = "매수" | "매도";
-export type DistributionCycle = "없음" | "월초" | "월중" | "월말" | "분기";
+export const ASSET_TYPES = ["개별주식", "ETF주식"] as const;
+export type AssetType = (typeof ASSET_TYPES)[number];
+
+export const COUNTRIES = ["KOR", "USA"] as const;
+export type Country = (typeof COUNTRIES)[number];
+
+export const TRADE_TYPES = ["매수", "매도"] as const;
+export type TradeType = (typeof TRADE_TYPES)[number];
+
+export const DISTRIBUTION_CYCLES = ["없음", "월초", "월중", "월말", "분기"] as const;
+export type DistributionCycle = (typeof DISTRIBUTION_CYCLES)[number];
 
 export type Holding = {
   id: string;

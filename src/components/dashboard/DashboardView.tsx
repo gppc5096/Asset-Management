@@ -160,6 +160,8 @@ export function DashboardView() {
       const g = monthlyMaps.general.get(mk);
       return {
         month: i + 1,
+        hasSpecial: s !== undefined,
+        hasGeneral: g !== undefined,
         specialTaxed: s?.taxedDistribution ?? 0,
         specialTax: s?.taxAmount ?? 0,
         generalTaxed: g?.taxedDistribution ?? 0,
@@ -306,13 +308,13 @@ export function DashboardView() {
         <CardContent className="overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>월</TableHead>
-                <TableHead>특별계좌</TableHead>
-                <TableHead>일반계좌</TableHead>
-                <TableHead>비과세계좌</TableHead>
-                <TableHead>월 합계</TableHead>
-                <TableHead>누적액</TableHead>
+              <TableRow className="bg-neutral-900 text-white hover:bg-neutral-900">
+                <TableHead className="text-white">월</TableHead>
+                <TableHead className="text-white">특별계좌</TableHead>
+                <TableHead className="text-white">일반계좌</TableHead>
+                <TableHead className="text-white">비과세계좌</TableHead>
+                <TableHead className="text-white">월 합계</TableHead>
+                <TableHead className="text-white">누적액</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -356,36 +358,57 @@ export function DashboardView() {
         <CardContent className="overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>월</TableHead>
-                <TableHead>특별계좌 과세분배금</TableHead>
-                <TableHead>특별계좌 과세금액</TableHead>
-                <TableHead>일반계좌 과세분배금</TableHead>
-                <TableHead>일반계좌 과세금액</TableHead>
-                <TableHead>합계 과세분배금</TableHead>
-                <TableHead>합계 과세금액</TableHead>
+              <TableRow className="bg-neutral-900 text-white hover:bg-neutral-900">
+                <TableHead className="text-white">월</TableHead>
+                <TableHead className="text-white">특별계좌 과세분배금</TableHead>
+                <TableHead className="text-white">특별계좌 과세금액</TableHead>
+                <TableHead className="text-white">일반계좌 과세분배금</TableHead>
+                <TableHead className="text-white">일반계좌 과세금액</TableHead>
+                <TableHead className="text-white">합계 과세분배금</TableHead>
+                <TableHead className="text-white">합계 과세금액</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {taxRows.map((row) => (
                 <TableRow key={row.month}>
                   <TableCell>{row.month}월</TableCell>
-                  <TableCell>{row.specialTaxed ? row.specialTaxed.toLocaleString() : "-"}</TableCell>
+                  <TableCell>{row.hasSpecial ? row.specialTaxed.toLocaleString() : "-"}</TableCell>
                   <TableCell className="text-red-500">
-                    {row.specialTax ? row.specialTax.toLocaleString() : "-"}
+                    {row.hasSpecial ? row.specialTax.toLocaleString() : "-"}
                   </TableCell>
-                  <TableCell>{row.generalTaxed ? row.generalTaxed.toLocaleString() : "-"}</TableCell>
+                  <TableCell>{row.hasGeneral ? row.generalTaxed.toLocaleString() : "-"}</TableCell>
                   <TableCell className="text-red-500">
-                    {row.generalTax ? row.generalTax.toLocaleString() : "-"}
+                    {row.hasGeneral ? row.generalTax.toLocaleString() : "-"}
                   </TableCell>
                   <TableCell className="font-medium">
-                    {row.totalTaxed ? row.totalTaxed.toLocaleString() : "-"}
+                    {row.hasSpecial || row.hasGeneral ? row.totalTaxed.toLocaleString() : "-"}
                   </TableCell>
                   <TableCell className="font-medium text-red-500">
-                    {row.totalTax ? row.totalTax.toLocaleString() : "-"}
+                    {row.hasSpecial || row.hasGeneral ? row.totalTax.toLocaleString() : "-"}
                   </TableCell>
                 </TableRow>
               ))}
+              <TableRow className="bg-neutral-900 font-medium text-white hover:bg-neutral-900">
+                <TableCell>합계</TableCell>
+                <TableCell>
+                  {taxRows.reduce((a, r) => a + r.specialTaxed, 0).toLocaleString()}
+                </TableCell>
+                <TableCell className="text-red-300">
+                  {taxRows.reduce((a, r) => a + r.specialTax, 0).toLocaleString()}
+                </TableCell>
+                <TableCell>
+                  {taxRows.reduce((a, r) => a + r.generalTaxed, 0).toLocaleString()}
+                </TableCell>
+                <TableCell className="text-red-300">
+                  {taxRows.reduce((a, r) => a + r.generalTax, 0).toLocaleString()}
+                </TableCell>
+                <TableCell>
+                  {taxRows.reduce((a, r) => a + r.totalTaxed, 0).toLocaleString()}
+                </TableCell>
+                <TableCell className="text-red-300">
+                  {taxRows.reduce((a, r) => a + r.totalTax, 0).toLocaleString()}
+                </TableCell>
+              </TableRow>
             </TableBody>
           </Table>
         </CardContent>

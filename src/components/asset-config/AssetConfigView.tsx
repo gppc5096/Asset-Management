@@ -42,6 +42,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
@@ -54,16 +55,23 @@ import {
 import { Combobox } from "@/components/ui/combobox";
 import { useAssetConfigContext } from "@/components/providers/AssetConfigProvider";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { summarizeByCurrency, netPositions } from "@/lib/holdings";
+import { summarizeByCurrency, netPositions, holdingsToCsv, parseHoldingsCsv } from "@/lib/holdings";
 import { isAssetConfig } from "@/lib/validate";
 import { localDateString } from "@/lib/date";
 import { formatNumericInput, parseNumericInput } from "@/lib/format";
 import { db } from "@/lib/firebaseConfig";
-import type { AccountType, AssetType, Country, DistributionCycle, Holding, TradeType } from "@/lib/types";
+import { ACCOUNT_TYPES } from "@/lib/types";
+import type {
+  AccountType,
+  AssetConfig,
+  AssetType,
+  Country,
+  DistributionCycle,
+  Holding,
+  TradeType,
+} from "@/lib/types";
 
 const COLORS = ["#7c3aed", "#f97316", "#0ea5e9", "#22c55e", "#ef4444", "#eab308", "#ec4899", "#14b8a6"];
-
-const ACCOUNT_TYPES: AccountType[] = ["일반계좌", "특별계좌", "비과세저축계좌", "ISA", "연금저축계좌"];
 
 function krw(n: number) {
   return `₩${Math.round(n).toLocaleString()}`;
@@ -108,6 +116,11 @@ export function AssetConfigView() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [cashDialogOpen, setCashDialogOpen] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [pendingImport, setPendingImport] = useState<Holding[] | null>(null);
+  const [pendingRestore, setPendingRestore] = useState<{ id: string; data: AssetConfig } | null>(
+    null
+  );
   const [cashForm, setCashForm] = useState({ krw: "0", usd: "0" });
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
 
@@ -320,11 +333,12 @@ export function AssetConfigView() {
   }
 
   function handleExport() {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const csv = holdingsToCsv(data.holdings);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `asset-config-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `${localDateString()}-자산관리_내보내기.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -332,40 +346,41 @@ export function AssetConfigView() {
   function handleImport() {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "application/json";
+    input.accept = ".csv,text/csv";
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
       const text = await file.text();
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        toast.error("파일 형식이 올바르지 않습니다");
+      const holdings = parseHoldingsCsv(text);
+      if (!holdings) {
+        toast.error(
+          "CSV 형식이 올바르지 않습니다 (주식구분,국가,거래일,증권사,종목명,계좌번호,계좌유형,거래유형,분배주기,매입단가,수량,매수금액,매도금액,적용환율 헤더 필요)"
+        );
         return;
       }
-      if (!isAssetConfig(parsed)) {
-        toast.error("자산 데이터 형식이 올바르지 않습니다 (holdings/cash/exchangeRate 필요)");
+      if (holdings.length === 0) {
+        toast.error("가져올 수 있는 유효한 행이 없습니다");
         return;
       }
-      if (
-        !confirm(
-          `현재 ${data.holdings.length}건을 가져온 ${parsed.holdings.length}건으로 교체합니다. 계속할까요?`
-        )
-      ) {
-        return;
-      }
-      await save({ ...parsed, updatedAt: new Date().toISOString() });
-      toast.success("가져오기 완료");
+      setPendingImport(holdings);
     };
     input.click();
+  }
+
+  async function confirmImport() {
+    if (!pendingImport) return;
+    await save({ ...data, holdings: pendingImport, updatedAt: new Date().toISOString() });
+    setPendingImport(null);
+    toast.success("가져오기 완료");
   }
 
   async function handleCloudBackup() {
     if (!user) return;
     const backupId = `asset-config-backup-${new Date().toISOString()}`;
     await setDoc(doc(db, "users", user.uid, "backups", backupId), data);
-    toast.success("클라우드에 백업되었습니다");
+    toast.success("클라우드에 백업되었습니다", {
+      style: { background: "#c4f5e4" },
+    });
   }
 
   async function handleCloudRestore() {
@@ -383,19 +398,26 @@ export function AssetConfigView() {
       toast.error("백업 데이터 형식이 올바르지 않습니다");
       return;
     }
-    if (!confirm(`가장 최근 백업(${backups[0].id})으로 복원할까요?`)) return;
-    await save(latestData);
-    toast.success("복원되었습니다");
+    setPendingRestore({ id: backups[0].id, data: latestData });
+  }
+
+  async function confirmRestore() {
+    if (!pendingRestore) return;
+    await save(pendingRestore.data);
+    setPendingRestore(null);
+    toast.success("복원되었습니다", {
+      style: { background: "#c4f5e4" },
+    });
   }
 
   async function handleReset() {
-    if (!confirm("전체 자산 데이터를 초기화할까요? 되돌릴 수 없습니다.")) return;
     await save({
       holdings: [],
       cash: { krw: 0, usd: 0, updatedAt: new Date().toISOString() },
       exchangeRate: data.exchangeRate,
       updatedAt: new Date().toISOString(),
     });
+    setResetDialogOpen(false);
     toast.success("초기화되었습니다");
   }
 
@@ -505,7 +527,12 @@ export function AssetConfigView() {
         <Button variant="outline" size="sm" onClick={() => void handleCloudRestore()} disabled={loading}>
           <CloudDownload className="mr-1 h-4 w-4" /> 클라우드 복원
         </Button>
-        <Button variant="outline" size="sm" onClick={handleReset} disabled={loading}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setResetDialogOpen(true)}
+          disabled={loading}
+        >
           <RotateCcw className="mr-1 h-4 w-4" /> 초기화
         </Button>
         <Button size="sm" onClick={openAdd} className="ml-auto" disabled={loading}>
@@ -827,6 +854,68 @@ export function AssetConfigView() {
           </div>
           <DialogFooter>
             <Button onClick={() => void handleCashSubmit()}>저장</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>전체 자산 데이터 초기화</DialogTitle>
+            <DialogDescription>
+              보유 종목, 현금 잔고가 모두 삭제됩니다. 이 작업은 되돌릴 수 없습니다. 계속할까요?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetDialogOpen(false)}>
+              취소
+            </Button>
+            <Button variant="destructive" onClick={() => void handleReset()}>
+              초기화
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={pendingImport !== null} onOpenChange={(open) => !open && setPendingImport(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>가져오기 확인</DialogTitle>
+            <DialogDescription>
+              현재 {data.holdings.length}건을 가져온 {pendingImport?.length ?? 0}건으로
+              교체합니다. 이 작업은 되돌릴 수 없습니다. 계속할까요?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingImport(null)}>
+              취소
+            </Button>
+            <Button variant="destructive" onClick={() => void confirmImport()}>
+              가져오기
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pendingRestore !== null}
+        onOpenChange={(open) => !open && setPendingRestore(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>클라우드 복원 확인</DialogTitle>
+            <DialogDescription>
+              가장 최근 백업({pendingRestore?.id})으로 현재 데이터를 덮어씁니다. 이 작업은
+              되돌릴 수 없습니다. 계속할까요?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingRestore(null)}>
+              취소
+            </Button>
+            <Button variant="destructive" onClick={() => void confirmRestore()}>
+              복원
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
