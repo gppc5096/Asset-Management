@@ -1,0 +1,432 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { TrendingUp, DollarSign, Coins, Wallet, CreditCard } from "lucide-react";
+import {
+  Bar,
+  Line,
+  ComposedChart,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { useAssetConfigContext } from "@/components/providers/AssetConfigProvider";
+import { useDistributionRecords } from "@/hooks/useDistributionRecords";
+import { summarizeByCurrency } from "@/lib/holdings";
+import { yearOf, sumByMonth } from "@/lib/aggregate";
+import type { DistributionCategory, DistributionRecord } from "@/lib/types";
+
+const CATEGORY_LABEL: Record<DistributionCategory, string> = {
+  special: "특별계좌",
+  general: "일반계좌",
+  "tax-free": "비과세계좌",
+};
+
+const CATEGORY_COLOR: Record<DistributionCategory, string> = {
+  special: "#7c3aed",
+  general: "#0ea5e9",
+  "tax-free": "#22c55e",
+};
+
+function krw(n: number) {
+  return `₩${Math.round(n).toLocaleString()}`;
+}
+
+function topTickerFor(records: DistributionRecord[]) {
+  const map = new Map<string, number>();
+  for (const r of records) {
+    map.set(r.ticker, (map.get(r.ticker) ?? 0) + r.distributionReceived);
+  }
+  let best = "";
+  let bestVal = -1;
+  for (const [t, v] of map.entries()) {
+    if (v > bestVal) {
+      best = t;
+      bestVal = v;
+    }
+  }
+  return best;
+}
+
+export function DashboardView() {
+  const { data: assetConfig } = useAssetConfigContext();
+  const special = useDistributionRecords("special");
+  const general = useDistributionRecords("general");
+  const taxFree = useDistributionRecords("tax-free");
+
+  const byCategory: Record<DistributionCategory, DistributionRecord[]> = useMemo(
+    () => ({
+      special: special.data.records,
+      general: general.data.records,
+      "tax-free": taxFree.data.records,
+    }),
+    [special.data.records, general.data.records, taxFree.data.records]
+  );
+
+  const allRecords = useMemo(
+    () => [...byCategory.special, ...byCategory.general, ...byCategory["tax-free"]],
+    [byCategory]
+  );
+
+  const years = useMemo(() => {
+    const set = new Set(allRecords.map((r) => yearOf(r.date)));
+    return [...set].sort().reverse();
+  }, [allRecords]);
+
+  const [year, setYear] = useState<string>("");
+  const effectiveYear = year || years[0] || String(new Date().getFullYear());
+
+  // 정적 export라 서버(빌드 시각)와 클라이언트(뷰어 타임존)의 로케일 문자열이 달라질 수 있어
+  // 마운트 후에만 포맷된 날짜를 렌더링해 하이드레이션 불일치를 피한다.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    // 표준 "클라이언트 마운트 후에만 렌더" 패턴 — 서버/클라 로케일 문자열 불일치를 피하려는 의도적 동기 setState
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
+  }, []);
+
+  const summary = useMemo(
+    () =>
+      summarizeByCurrency(
+        assetConfig.holdings,
+        assetConfig.cash,
+        assetConfig.exchangeRate
+      ),
+    [assetConfig]
+  );
+
+  const yearTotals = useMemo(
+    () =>
+      (Object.keys(byCategory) as DistributionCategory[]).map((cat) => {
+        const total = byCategory[cat]
+          .filter((r) => yearOf(r.date) === effectiveYear)
+          .reduce((a, r) => a + r.total, 0);
+        return { cat, total };
+      }),
+    [byCategory, effectiveYear]
+  );
+  const yearGrandTotal = yearTotals.reduce((a, v) => a + v.total, 0) || 1;
+
+  const monthlyMaps = useMemo(
+    () => ({
+      special: sumByMonth(byCategory.special),
+      general: sumByMonth(byCategory.general),
+      "tax-free": sumByMonth(byCategory["tax-free"]),
+    }),
+    [byCategory]
+  );
+
+  const monthRows = useMemo(() => {
+    const withoutCumulative = Array.from({ length: 12 }, (_, i) => {
+      const mk = `${effectiveYear}-${String(i + 1).padStart(2, "0")}`;
+      const specialTotal = monthlyMaps.special.get(mk)?.total ?? 0;
+      const generalTotal = monthlyMaps.general.get(mk)?.total ?? 0;
+      const taxFreeTotal = monthlyMaps["tax-free"].get(mk)?.total ?? 0;
+      return {
+        month: i + 1,
+        special: specialTotal,
+        general: generalTotal,
+        taxFree: taxFreeTotal,
+        monthTotal: specialTotal + generalTotal + taxFreeTotal,
+      };
+    });
+    return withoutCumulative.reduce<Array<(typeof withoutCumulative)[number] & { cumulative: number }>>(
+      (rows, row) => {
+        const prevCumulative = rows.length ? rows[rows.length - 1].cumulative : 0;
+        rows.push({ ...row, cumulative: prevCumulative + row.monthTotal });
+        return rows;
+      },
+      []
+    );
+  }, [effectiveYear, monthlyMaps]);
+
+  const taxRows = useMemo(() => {
+    return Array.from({ length: 12 }, (_, i) => {
+      const mk = `${effectiveYear}-${String(i + 1).padStart(2, "0")}`;
+      const s = monthlyMaps.special.get(mk);
+      const g = monthlyMaps.general.get(mk);
+      return {
+        month: i + 1,
+        specialTaxed: s?.taxedDistribution ?? 0,
+        specialTax: s?.taxAmount ?? 0,
+        generalTaxed: g?.taxedDistribution ?? 0,
+        generalTax: g?.taxAmount ?? 0,
+        totalTaxed: (s?.taxedDistribution ?? 0) + (g?.taxedDistribution ?? 0),
+        totalTax: (s?.taxAmount ?? 0) + (g?.taxAmount ?? 0),
+      };
+    });
+  }, [effectiveYear, monthlyMaps]);
+
+  const comboCharts = useMemo(
+    () =>
+      (["special", "general"] as DistributionCategory[]).map((cat) => {
+        const records = byCategory[cat].filter(
+          (r) => yearOf(r.date) === effectiveYear
+        );
+        const ticker = topTickerFor(records);
+        const points = records
+          .filter((r) => r.ticker === ticker)
+          .sort((a, b) => (a.date < b.date ? -1 : 1))
+          .map((r) => ({
+            date: r.date,
+            distribution: r.total,
+            price: r.price,
+          }));
+        return { cat, ticker, points };
+      }),
+    [byCategory, effectiveYear]
+  );
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold">Dashboard</h1>
+          <p className="text-sm text-neutral-500">통합 자산 현황</p>
+        </div>
+        <p className="text-xs text-neutral-400">
+          {mounted
+            ? `마지막 업데이트: ${new Date(assetConfig.updatedAt).toLocaleString("ko-KR")}`
+            : " "}
+        </p>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl">
+        <div className="bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-6 text-white">
+          <div className="flex items-center gap-2 text-sm text-white/80">
+            <TrendingUp className="h-4 w-4" /> 총 자산 현황 (KRW 환산, 추정)
+          </div>
+          <p className="mt-1 text-3xl font-extrabold">{krw(summary.totalKrw)}</p>
+          <p className="mt-1 text-xs text-white/70">
+            적용환율 (USD/KRW) ₩{assetConfig.exchangeRate.rate.toLocaleString()} · 최근
+            매수단가 기준 추정치입니다
+          </p>
+        </div>
+        <div className="grid grid-cols-2 bg-white">
+          <div className="border-b border-r p-4">
+            <div className="flex items-center gap-1 text-sm text-neutral-500">
+              <DollarSign className="h-4 w-4 text-blue-500" /> 해외주식 (USD)
+            </div>
+            <p className="text-lg font-bold text-blue-600">
+              ${summary.usdStockValue.toLocaleString()}
+            </p>
+          </div>
+          <div className="border-b p-4">
+            <div className="flex items-center gap-1 text-sm text-neutral-500">
+              <Coins className="h-4 w-4 text-red-500" /> 국내주식 (KRW)
+            </div>
+            <p className="text-lg font-bold text-red-600">
+              {krw(summary.krwStockValue)}
+            </p>
+          </div>
+          <div className="border-r p-4">
+            <div className="flex items-center gap-1 text-sm text-neutral-500">
+              <Wallet className="h-4 w-4 text-emerald-500" /> USD 현금
+            </div>
+            <p className="text-lg font-bold text-emerald-600">
+              ${assetConfig.cash.usd.toLocaleString()}
+            </p>
+          </div>
+          <div className="p-4">
+            <div className="flex items-center gap-1 text-sm text-neutral-500">
+              <CreditCard className="h-4 w-4 text-amber-500" /> KRW 현금
+            </div>
+            <p className="text-lg font-bold text-amber-600">
+              {krw(assetConfig.cash.krw)}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-sm">연도별 배당 수령액</CardTitle>
+          <div className="flex gap-1">
+            {years.map((y) => (
+              <Button
+                key={y}
+                size="sm"
+                variant={y === effectiveYear ? "default" : "outline"}
+                onClick={() => setYear(y)}
+              >
+                {y}
+              </Button>
+            ))}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <p className="text-xs text-neutral-400">{effectiveYear}년 전체 수령액 (세후)</p>
+            <p className="text-2xl font-bold">
+              {krw(yearTotals.reduce((a, v) => a + v.total, 0))}
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {yearTotals.map(({ cat, total }) => (
+              <div key={cat}>
+                <div className="mb-1 flex justify-between text-xs text-neutral-500">
+                  <span>{CATEGORY_LABEL[cat]}</span>
+                  <span>{krw(total)}</span>
+                </div>
+                <div className="h-2 rounded-full bg-neutral-100">
+                  <div
+                    className="h-2 rounded-full"
+                    style={{
+                      width: `${(total / yearGrandTotal) * 100}%`,
+                      backgroundColor: CATEGORY_COLOR[cat],
+                    }}
+                  />
+                </div>
+                <p className="mt-0.5 text-xs text-neutral-400">
+                  {((total / yearGrandTotal) * 100).toFixed(1)}%
+                </p>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">월별 배당 수령액 추이 ({effectiveYear}년)</CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>월</TableHead>
+                <TableHead>특별계좌</TableHead>
+                <TableHead>일반계좌</TableHead>
+                <TableHead>비과세계좌</TableHead>
+                <TableHead>월 합계</TableHead>
+                <TableHead>누적액</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {monthRows.map((row) => (
+                <TableRow key={row.month}>
+                  <TableCell>{row.month}월</TableCell>
+                  <TableCell>{row.special ? krw(row.special) : "-"}</TableCell>
+                  <TableCell>{row.general ? krw(row.general) : "-"}</TableCell>
+                  <TableCell>{row.taxFree ? krw(row.taxFree) : "-"}</TableCell>
+                  <TableCell className="font-medium">
+                    {row.monthTotal ? krw(row.monthTotal) : "-"}
+                  </TableCell>
+                  <TableCell>{krw(row.cumulative)}</TableCell>
+                </TableRow>
+              ))}
+              <TableRow className="bg-neutral-900 font-medium text-white hover:bg-neutral-900">
+                <TableCell>합계</TableCell>
+                <TableCell>
+                  {krw(monthRows.reduce((a, r) => a + r.special, 0))}
+                </TableCell>
+                <TableCell>
+                  {krw(monthRows.reduce((a, r) => a + r.general, 0))}
+                </TableCell>
+                <TableCell>
+                  {krw(monthRows.reduce((a, r) => a + r.taxFree, 0))}
+                </TableCell>
+                <TableCell>
+                  {krw(monthRows.reduce((a, r) => a + r.monthTotal, 0))}
+                </TableCell>
+                <TableCell>-</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">과세분배금 및 과세금액 현황 ({effectiveYear}년)</CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>월</TableHead>
+                <TableHead>특별계좌 과세분배금</TableHead>
+                <TableHead>특별계좌 과세금액</TableHead>
+                <TableHead>일반계좌 과세분배금</TableHead>
+                <TableHead>일반계좌 과세금액</TableHead>
+                <TableHead>합계 과세분배금</TableHead>
+                <TableHead>합계 과세금액</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {taxRows.map((row) => (
+                <TableRow key={row.month}>
+                  <TableCell>{row.month}월</TableCell>
+                  <TableCell>{row.specialTaxed ? row.specialTaxed.toLocaleString() : "-"}</TableCell>
+                  <TableCell className="text-red-500">
+                    {row.specialTax ? row.specialTax.toLocaleString() : "-"}
+                  </TableCell>
+                  <TableCell>{row.generalTaxed ? row.generalTaxed.toLocaleString() : "-"}</TableCell>
+                  <TableCell className="text-red-500">
+                    {row.generalTax ? row.generalTax.toLocaleString() : "-"}
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    {row.totalTaxed ? row.totalTaxed.toLocaleString() : "-"}
+                  </TableCell>
+                  <TableCell className="font-medium text-red-500">
+                    {row.totalTax ? row.totalTax.toLocaleString() : "-"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {comboCharts.map(({ cat, ticker, points }) => (
+          <Card key={cat}>
+            <CardHeader>
+              <CardTitle className="text-sm">
+                {ticker || "데이터 없음"} · {CATEGORY_LABEL[cat]}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={points}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" fontSize={10} />
+                  <YAxis yAxisId="left" fontSize={11} />
+                  <YAxis yAxisId="right" orientation="right" fontSize={11} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar
+                    yAxisId="left"
+                    dataKey="distribution"
+                    name="분배금"
+                    fill={CATEGORY_COLOR[cat]}
+                  />
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="price"
+                    name="주가"
+                    stroke="#f97316"
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
