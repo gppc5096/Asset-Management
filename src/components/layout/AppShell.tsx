@@ -36,7 +36,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-dvh flex-col bg-desk">
-      <header className="sticky top-0 z-50 flex min-h-14 items-center justify-between border-b border-white/10 bg-header px-4 py-3.5 shadow-[0_1px_0_rgb(255_255_255/0.04)] sm:min-h-16 sm:px-6">
+      <header className="sticky top-0 z-50 flex min-h-14 items-center justify-between border-b border-white/10 bg-secondary px-4 py-3.5 shadow-[0_1px_0_rgb(255_255_255/0.04)] sm:min-h-16 sm:px-6 md:bg-header">
         <Link href="/" className="flex items-center gap-2 text-lg font-bold tracking-tight text-foreground">
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/15 text-primary ring-1 ring-primary/30">
             <LayoutGrid className="h-4 w-4" />
@@ -80,7 +80,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <ScrollToTopButton />
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-white/10 bg-header pb-[env(safe-area-inset-bottom)] md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-white/10 bg-secondary pb-[env(safe-area-inset-bottom)] md:hidden">
         {NAV_ITEMS.map((item) => {
           const active = pathname === item.href;
           const Icon = item.icon;
