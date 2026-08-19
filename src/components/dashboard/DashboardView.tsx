@@ -390,19 +390,19 @@ export function DashboardView() {
                 <TableCell>
                   {taxRows.reduce((a, r) => a + r.specialTaxed, 0).toLocaleString()}
                 </TableCell>
-                <TableCell className="text-red-300">
+                <TableCell className="text-rose-300">
                   {taxRows.reduce((a, r) => a + r.specialTax, 0).toLocaleString()}
                 </TableCell>
                 <TableCell>
                   {taxRows.reduce((a, r) => a + r.generalTaxed, 0).toLocaleString()}
                 </TableCell>
-                <TableCell className="text-red-300">
+                <TableCell className="text-rose-300">
                   {taxRows.reduce((a, r) => a + r.generalTax, 0).toLocaleString()}
                 </TableCell>
                 <TableCell>
                   {taxRows.reduce((a, r) => a + r.totalTaxed, 0).toLocaleString()}
                 </TableCell>
-                <TableCell className="text-red-300">
+                <TableCell className="text-rose-300">
                   {taxRows.reduce((a, r) => a + r.totalTax, 0).toLocaleString()}
                 </TableCell>
               </TableRow>
