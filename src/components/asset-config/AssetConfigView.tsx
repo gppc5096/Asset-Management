@@ -307,26 +307,26 @@ export function AssetConfigView() {
     <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
       <div>
         <h1 className="text-xl font-bold">전체 자산관리 현황</h1>
-        <p className="text-sm text-neutral-500">보유한 자산 데이터를 체계적으로 관리합니다.</p>
+        <p className="text-sm text-muted-foreground">보유한 자산 데이터를 체계적으로 관리합니다.</p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-neutral-500">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               총 자산 (추정)
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold">{krw(summary.totalKrw)}</p>
-            <p className="text-xs text-neutral-400">
+            <p className="text-xs text-muted-foreground">
               적용환율 (USD/KRW) {krw(data.exchangeRate.rate)}
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-neutral-500">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               USD 자산
             </CardTitle>
             <Button variant="ghost" size="icon-sm" onClick={openCashEdit}>
@@ -337,7 +337,7 @@ export function AssetConfigView() {
             <p className="text-2xl font-bold text-blue-600">
               ${summary.usdAssets.toLocaleString()}
             </p>
-            <p className="text-xs text-neutral-400">
+            <p className="text-xs text-muted-foreground">
               주식 ${summary.usdStockValue.toLocaleString()} + 현금 $
               {data.cash.usd.toLocaleString()}
             </p>
@@ -345,7 +345,7 @@ export function AssetConfigView() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-neutral-500">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               KRW 자산
             </CardTitle>
             <Button variant="ghost" size="icon-sm" onClick={openCashEdit}>
@@ -354,7 +354,7 @@ export function AssetConfigView() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-red-600">{krw(summary.krwAssets)}</p>
-            <p className="text-xs text-neutral-400">
+            <p className="text-xs text-muted-foreground">
               주식 {krw(summary.krwStockValue)} + 현금 {krw(data.cash.krw)}
             </p>
           </CardContent>
@@ -479,7 +479,7 @@ export function AssetConfigView() {
               ))}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center text-neutral-400">
+                  <TableCell colSpan={12} className="text-center text-muted-foreground">
                     {loading ? "불러오는 중..." : "데이터가 없습니다"}
                   </TableCell>
                 </TableRow>
@@ -522,7 +522,7 @@ export function AssetConfigView() {
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <p className="mb-2 font-medium text-neutral-500">KRW 종목</p>
+              <p className="mb-2 font-medium text-muted-foreground">KRW 종목</p>
               {Object.entries(tickerShareByCountry.krw).map(([t, q]) => (
                 <div key={t} className="flex justify-between border-b py-1">
                   <span className="truncate">{t}</span>
@@ -531,7 +531,7 @@ export function AssetConfigView() {
               ))}
             </div>
             <div>
-              <p className="mb-2 font-medium text-neutral-500">USD 종목</p>
+              <p className="mb-2 font-medium text-muted-foreground">USD 종목</p>
               {Object.entries(tickerShareByCountry.usd).map(([t, q]) => (
                 <div key={t} className="flex justify-between border-b py-1">
                   <span className="truncate">{t}</span>
@@ -572,7 +572,7 @@ export function AssetConfigView() {
                 <XAxis type="number" fontSize={11} />
                 <YAxis type="category" dataKey="ticker" width={140} fontSize={10} />
                 <Tooltip formatter={(v) => Number(v).toLocaleString()} />
-                <Bar dataKey="value" fill="#7c3aed" />
+                <Bar dataKey="value" fill="#f5a524" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>

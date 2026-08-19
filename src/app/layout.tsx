@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   description: "개인 자산 및 배당금 관리 대시보드",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
     title: "Asset Mgmt",
   },
 };
@@ -35,7 +35,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#4F46E5",
+  themeColor: "#0a0e17",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({
@@ -46,7 +47,7 @@ export default function RootLayout({
   return (
     <html
       lang="ko"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <AuthProvider>

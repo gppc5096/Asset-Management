@@ -49,39 +49,41 @@ export function OnboardingModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
-        <div className="relative bg-gradient-to-br from-indigo-600 to-violet-600 px-6 py-8 text-center text-white">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-[2px]">
+      <div className="w-full max-w-md overflow-hidden rounded-xl border border-white/10 bg-card shadow-2xl shadow-black/50">
+        <div className="relative border-b border-white/10 bg-header px-6 py-8 text-center">
           <button
             onClick={close}
-            className="absolute right-4 top-4 rounded-full bg-white/20 p-2 hover:bg-white/30"
+            className="absolute right-4 top-4 rounded-full bg-white/5 p-2 text-muted-foreground ring-1 ring-white/10 hover:bg-white/10 hover:text-foreground"
           >
             <X className="h-4 w-4" />
           </button>
-          <TrendingUp className="mx-auto mb-2 h-8 w-8" />
-          <h2 className="text-xl font-bold">My Asset Portfolio</h2>
-          <p className="mt-1 text-sm text-white/80">오늘의 자산 현황 요약</p>
+          <TrendingUp className="mx-auto mb-2 h-8 w-8 text-primary" />
+          <h2 className="text-xl font-bold tracking-tight text-foreground">
+            My Asset Portfolio
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">오늘의 자산 현황 요약</p>
         </div>
 
         <div className="space-y-4 p-6">
-          <div className="rounded-xl bg-neutral-50 p-5 text-center">
-            <p className="text-xs font-semibold tracking-wide text-neutral-400">
+          <div className="rounded-xl border border-white/8 bg-desk p-5 text-center">
+            <p className="text-xs font-semibold tracking-wide text-muted-foreground">
               TOTAL ESTIMATED ASSETS
             </p>
-            <p className="mt-1 text-3xl font-extrabold">
+            <p className="mt-1 font-mono text-3xl font-extrabold text-foreground">
               ₩{Math.round(totalKrw).toLocaleString()}
             </p>
-            <span className="mt-2 inline-block rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium">
+            <span className="mt-2 inline-block rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground">
               적용환율 (USD) ₩{appliedUsdRate.toLocaleString()}
             </span>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl bg-blue-50 p-4">
-              <div className="flex items-center gap-1 text-sm text-neutral-500">
-                <DollarSign className="h-4 w-4" /> USD Assets
+            <div className="rounded-xl border border-sky-500/20 bg-sky-500/10 p-4">
+              <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                <DollarSign className="h-4 w-4 text-sky-400" /> USD Assets
               </div>
-              <p className="mt-1 text-lg font-bold text-blue-600">
+              <p className="mt-1 font-mono text-lg font-bold text-sky-400">
                 $
                 {usdAssets.toLocaleString(undefined, {
                   minimumFractionDigits: 2,
@@ -89,19 +91,19 @@ export function OnboardingModal({
                 })}
               </p>
             </div>
-            <div className="rounded-xl bg-red-50 p-4">
-              <div className="flex items-center gap-1 text-sm text-neutral-500">
-                <Coins className="h-4 w-4" /> KRW Assets
+            <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-4">
+              <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                <Coins className="h-4 w-4 text-rose-400" /> KRW Assets
               </div>
-              <p className="mt-1 text-lg font-bold text-red-600">
+              <p className="mt-1 font-mono text-lg font-bold text-rose-400">
                 ₩{Math.round(krwAssets).toLocaleString()}
               </p>
-              <p className="text-xs text-neutral-400">(현금 + 국내주식)</p>
+              <p className="text-xs text-muted-foreground">(현금 + 국내주식)</p>
             </div>
           </div>
 
           <div className="flex items-center justify-between pt-2">
-            <label className="flex items-center gap-2 text-sm text-neutral-500">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <Checkbox
                 checked={dontShowToday}
                 onCheckedChange={(v) => setDontShowToday(v === true)}
@@ -110,7 +112,7 @@ export function OnboardingModal({
             </label>
             <button
               onClick={close}
-              className="rounded-lg bg-neutral-900 px-5 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+              className="rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
               닫기
             </button>

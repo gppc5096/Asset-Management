@@ -24,7 +24,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="flex min-h-dvh items-center justify-center text-neutral-400">
+      <div className="flex min-h-dvh items-center justify-center bg-background text-muted-foreground">
         불러오는 중...
       </div>
     );
@@ -32,11 +32,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (!user) {
     return (
-      <div className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-neutral-50 px-4 text-center">
-        <TrendingUp className="h-10 w-10 text-violet-600" />
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-background px-4 text-center">
+        <TrendingUp className="h-10 w-10 text-primary" />
         <div>
-          <h1 className="text-xl font-bold">Asset Management</h1>
-          <p className="mt-1 text-sm text-neutral-500">
+          <h1 className="text-xl font-bold text-foreground">Asset Management</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Google 계정으로 로그인해주세요
           </p>
         </div>

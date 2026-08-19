@@ -37,9 +37,9 @@ const CATEGORY_LABEL: Record<DistributionCategory, string> = {
 };
 
 const CATEGORY_COLOR: Record<DistributionCategory, string> = {
-  special: "#7c3aed",
-  general: "#0ea5e9",
-  "tax-free": "#22c55e",
+  special: "#f5a524",
+  general: "#38bdf8",
+  "tax-free": "#34d399",
 };
 
 function krw(n: number) {
@@ -192,9 +192,9 @@ export function DashboardView() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">Dashboard</h1>
-          <p className="text-sm text-neutral-500">통합 자산 현황</p>
+          <p className="text-sm text-muted-foreground">통합 자산 현황</p>
         </div>
-        <p className="text-xs text-neutral-400">
+        <p className="text-xs text-muted-foreground">
           {mounted
             ? `마지막 업데이트: ${new Date(assetConfig.updatedAt).toLocaleString("ko-KR")}`
             : " "}
@@ -202,43 +202,45 @@ export function DashboardView() {
       </div>
 
       <div className="overflow-hidden rounded-2xl">
-        <div className="bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-6 text-white">
-          <div className="flex items-center gap-2 text-sm text-white/80">
-            <TrendingUp className="h-4 w-4" /> 총 자산 현황 (KRW 환산, 추정)
+        <div className="border-b border-white/10 bg-header px-6 py-6">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <TrendingUp className="h-4 w-4 text-primary" /> 총 자산 현황 (KRW 환산, 추정)
           </div>
-          <p className="mt-1 text-3xl font-extrabold">{krw(summary.totalKrw)}</p>
-          <p className="mt-1 text-xs text-white/70">
+          <p className="mt-1 font-mono text-3xl font-extrabold tracking-tight text-foreground">
+            {krw(summary.totalKrw)}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
             적용환율 (USD/KRW) ₩{assetConfig.exchangeRate.rate.toLocaleString()} · 최근
             매수단가 기준 추정치입니다
           </p>
         </div>
-        <div className="grid grid-cols-2 bg-white">
+        <div className="grid grid-cols-2 bg-card">
           <div className="border-b border-r p-4">
-            <div className="flex items-center gap-1 text-sm text-neutral-500">
-              <DollarSign className="h-4 w-4 text-blue-500" /> 해외주식 (USD)
+            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+              <DollarSign className="h-4 w-4 text-sky-400" /> 해외주식 (USD)
             </div>
-            <p className="text-lg font-bold text-blue-600">
+            <p className="text-lg font-bold text-sky-400">
               ${summary.usdStockValue.toLocaleString()}
             </p>
           </div>
           <div className="border-b p-4">
-            <div className="flex items-center gap-1 text-sm text-neutral-500">
-              <Coins className="h-4 w-4 text-red-500" /> 국내주식 (KRW)
+            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+              <Coins className="h-4 w-4 text-rose-400" /> 국내주식 (KRW)
             </div>
-            <p className="text-lg font-bold text-red-600">
+            <p className="text-lg font-bold text-rose-400">
               {krw(summary.krwStockValue)}
             </p>
           </div>
           <div className="border-r p-4">
-            <div className="flex items-center gap-1 text-sm text-neutral-500">
-              <Wallet className="h-4 w-4 text-emerald-500" /> USD 현금
+            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+              <Wallet className="h-4 w-4 text-emerald-400" /> USD 현금
             </div>
-            <p className="text-lg font-bold text-emerald-600">
+            <p className="text-lg font-bold text-emerald-400">
               ${assetConfig.cash.usd.toLocaleString()}
             </p>
           </div>
           <div className="p-4">
-            <div className="flex items-center gap-1 text-sm text-neutral-500">
+            <div className="flex items-center gap-1 text-sm text-muted-foreground">
               <CreditCard className="h-4 w-4 text-amber-500" /> KRW 현금
             </div>
             <p className="text-lg font-bold text-amber-600">
@@ -266,7 +268,7 @@ export function DashboardView() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <p className="text-xs text-neutral-400">{effectiveYear}년 전체 수령액 (세후)</p>
+            <p className="text-xs text-muted-foreground">{effectiveYear}년 전체 수령액 (세후)</p>
             <p className="text-2xl font-bold">
               {krw(yearTotals.reduce((a, v) => a + v.total, 0))}
             </p>
@@ -274,7 +276,7 @@ export function DashboardView() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {yearTotals.map(({ cat, total }) => (
               <div key={cat}>
-                <div className="mb-1 flex justify-between text-xs text-neutral-500">
+                <div className="mb-1 flex justify-between text-xs text-muted-foreground">
                   <span>{CATEGORY_LABEL[cat]}</span>
                   <span>{krw(total)}</span>
                 </div>
@@ -287,7 +289,7 @@ export function DashboardView() {
                     }}
                   />
                 </div>
-                <p className="mt-0.5 text-xs text-neutral-400">
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   {((total / yearGrandTotal) * 100).toFixed(1)}%
                 </p>
               </div>
@@ -368,17 +370,17 @@ export function DashboardView() {
                 <TableRow key={row.month}>
                   <TableCell>{row.month}월</TableCell>
                   <TableCell>{row.hasSpecial ? row.specialTaxed.toLocaleString() : "-"}</TableCell>
-                  <TableCell className="text-red-500">
+                  <TableCell className="text-rose-400">
                     {row.hasSpecial ? row.specialTax.toLocaleString() : "-"}
                   </TableCell>
                   <TableCell>{row.hasGeneral ? row.generalTaxed.toLocaleString() : "-"}</TableCell>
-                  <TableCell className="text-red-500">
+                  <TableCell className="text-rose-400">
                     {row.hasGeneral ? row.generalTax.toLocaleString() : "-"}
                   </TableCell>
                   <TableCell className="font-medium">
                     {row.hasSpecial || row.hasGeneral ? row.totalTaxed.toLocaleString() : "-"}
                   </TableCell>
-                  <TableCell className="font-medium text-red-500">
+                  <TableCell className="font-medium text-rose-400">
                     {row.hasSpecial || row.hasGeneral ? row.totalTax.toLocaleString() : "-"}
                   </TableCell>
                 </TableRow>
@@ -418,7 +420,7 @@ export function DashboardView() {
             {comboCharts.map(({ cat, ticker, points }) => (
               <div key={`${cat}-${ticker}`} className="rounded-lg border p-4">
                 <p className="mb-2 text-sm">
-                  <span className="font-bold text-neutral-900">
+                  <span className="font-bold text-foreground">
                     {ticker || "데이터 없음"}
                   </span>
                   <span style={{ color: CATEGORY_COLOR[cat] }}> - {CATEGORY_LABEL[cat]}</span>
@@ -441,8 +443,8 @@ export function DashboardView() {
                         type="monotone"
                         dataKey="price"
                         name="주가"
-                        stroke="#312e81"
-                        dot={{ r: 4, fill: "#fff", stroke: "#312e81", strokeWidth: 2 }}
+                        stroke="#f5a524"
+                        dot={{ r: 4, fill: "#161d2b", stroke: "#f5a524", strokeWidth: 2 }}
                       />
                       <Bar
                         yAxisId="right"

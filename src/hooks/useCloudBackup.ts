@@ -19,7 +19,7 @@ export function useCloudBackup<T extends object>(
     if (!user) return;
     const backupId = `${collectionPrefix}-backup-${new Date().toISOString()}`;
     await setDoc(doc(db, "users", user.uid, "backups", backupId), data);
-    toast.success("클라우드에 백업되었습니다", { style: { background: "#c4f5e4" } });
+    toast.success("클라우드에 백업되었습니다", { style: { background: "#1c2536" } });
   }
 
   async function requestRestore() {
@@ -45,7 +45,7 @@ export function useCloudBackup<T extends object>(
     if (!pendingRestore) return;
     await save(pendingRestore.data);
     setPendingRestore(null);
-    toast.success("복원되었습니다", { style: { background: "#c4f5e4" } });
+    toast.success("복원되었습니다", { style: { background: "#1c2536" } });
   }
 
   function cancelRestore() {

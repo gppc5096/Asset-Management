@@ -35,10 +35,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
 
   return (
-    <div className="flex min-h-dvh flex-col bg-neutral-50">
-      <header className="sticky top-0 z-50 flex items-center justify-between border-b bg-white/95 px-4 py-3 backdrop-blur supports-backdrop-filter:bg-white/80 sm:px-6">
-        <Link href="/" className="flex items-center gap-2 font-bold text-lg">
-          <LayoutGrid className="h-5 w-5 text-violet-600" />
+    <div className="flex min-h-dvh flex-col bg-desk">
+      <header className="sticky top-0 z-50 flex min-h-14 items-center justify-between border-b border-white/10 bg-header px-4 py-3.5 shadow-[0_1px_0_rgb(255_255_255/0.04)] sm:min-h-16 sm:px-6">
+        <Link href="/" className="flex items-center gap-2 text-lg font-bold tracking-tight text-foreground">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/15 text-primary ring-1 ring-primary/30">
+            <LayoutGrid className="h-4 w-4" />
+          </span>
           Asset Management
         </Link>
 
@@ -50,10 +52,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  "rounded-md px-3 py-2 text-sm font-medium transition-colors",
                   active
-                    ? "bg-violet-100 text-violet-700"
-                    : "text-neutral-600 hover:bg-neutral-100"
+                    ? "bg-primary/15 text-primary ring-1 ring-primary/25"
+                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
                 )}
               >
                 {item.desktopLabel}
@@ -62,11 +64,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="flex items-center gap-3 text-sm text-neutral-500">
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
           <span className="hidden sm:inline">{user?.email}</span>
           <button
             onClick={() => void signOut()}
-            className="flex items-center gap-1 hover:text-neutral-800"
+            className="flex items-center gap-1 hover:text-foreground"
           >
             <LogOut className="h-4 w-4" />
             <span className="hidden sm:inline">로그아웃</span>
@@ -78,7 +80,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <ScrollToTopButton />
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t bg-white pb-[env(safe-area-inset-bottom)] md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-white/10 bg-header pb-[env(safe-area-inset-bottom)] md:hidden">
         {NAV_ITEMS.map((item) => {
           const active = pathname === item.href;
           const Icon = item.icon;
@@ -87,8 +89,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex flex-1 flex-col items-center gap-0.5 py-2 text-xs",
-                active ? "text-violet-600" : "text-neutral-400"
+                "flex flex-1 flex-col items-center gap-0.5 py-2.5 text-xs",
+                active ? "text-primary" : "text-muted-foreground"
               )}
             >
               <Icon className="h-5 w-5" />

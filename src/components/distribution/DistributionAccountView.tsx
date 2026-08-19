@@ -372,12 +372,12 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
     <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
       <div>
         <h1 className="text-xl font-bold">{title}</h1>
-        <p className="text-sm text-neutral-500">{subtitle}</p>
+        <p className="text-sm text-muted-foreground">{subtitle}</p>
       </div>
 
       <Card>
         <CardContent className="flex flex-wrap items-center gap-3 pt-6">
-          <span className="text-sm font-medium text-neutral-500">조회기간</span>
+          <span className="text-sm font-medium text-muted-foreground">조회기간</span>
           <Select
             value={effectiveStart}
             onValueChange={(v) => setStartMonth(v ?? "")}
@@ -415,18 +415,18 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-neutral-500">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               주식수량 합계
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold">{totalQuantity.toLocaleString()} 주</p>
-            <p className="text-xs text-neutral-400">* 종목별 최신 데이터 기준, 보유중인 종목만</p>
+            <p className="text-xs text-muted-foreground">* 종목별 최신 데이터 기준, 보유중인 종목만</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-neutral-500">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               평균 주식 단가 (가중평균)
             </CardTitle>
           </CardHeader>
@@ -436,7 +436,7 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-neutral-500">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               분배금 합계
             </CardTitle>
           </CardHeader>
@@ -518,7 +518,7 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
                 <TableRow key={r.id}>
                   <TableCell>{r.date}</TableCell>
                   <TableCell
-                    className={r.held ? "" : "text-neutral-400 line-through"}
+                    className={r.held ? "" : "text-muted-foreground line-through"}
                   >
                     {r.ticker}
                   </TableCell>
@@ -527,10 +527,10 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
                   <TableCell
                     className={
                       priceChange > 0
-                        ? "text-red-500"
+                        ? "text-rose-400"
                         : priceChange < 0
-                          ? "text-blue-500"
-                          : "text-neutral-400"
+                          ? "text-sky-400"
+                          : "text-muted-foreground"
                     }
                   >
                     {priceChange > 0 ? "+" : ""}
@@ -540,10 +540,10 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
                   <TableCell
                     className={
                       distributionChange > 0
-                        ? "text-red-500"
+                        ? "text-rose-400"
                         : distributionChange < 0
-                          ? "text-blue-500"
-                          : "text-neutral-400"
+                          ? "text-sky-400"
+                          : "text-muted-foreground"
                     }
                   >
                     {distributionChange > 0 ? "+" : ""}
@@ -584,7 +584,7 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
               })}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={14} className="text-center text-neutral-400">
+                  <TableCell colSpan={14} className="text-center text-muted-foreground">
                     {loading ? "불러오는 중..." : "데이터가 없습니다"}
                   </TableCell>
                 </TableRow>
@@ -680,7 +680,7 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
                 <YAxis fontSize={11} />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="total" name="순수령액" fill="#7c3aed" />
+                <Bar dataKey="total" name="순수령액" fill="#f5a524" />
                 <Bar dataKey="taxAmount" name="과세금액" fill="#f97316" />
               </BarChart>
             </ResponsiveContainer>
