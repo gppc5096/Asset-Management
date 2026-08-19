@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Combobox } from "@/components/ui/combobox";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -54,6 +55,8 @@ import {
 } from "@/components/ui/select";
 import { useDistributionRecords } from "@/hooks/useDistributionRecords";
 import {
+  calcDistributionChange,
+  calcPriceChange,
   computeDistributionAmounts,
   distributionRecordsToCsv,
   parseDistributionCsv,
@@ -62,7 +65,7 @@ import { monthKey } from "@/lib/aggregate";
 import { db } from "@/lib/firebaseConfig";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { isDistributionDoc } from "@/lib/validate";
-import { localDateString } from "@/lib/date";
+import { localDateString, previousMonthKey } from "@/lib/date";
 import type { DistributionCategory, DistributionDoc, DistributionRecord } from "@/lib/types";
 
 type Props = {
@@ -124,6 +127,7 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
   const [endMonth, setEndMonth] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingTicker, setEditingTicker] = useState<string | null>(null);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [pendingImport, setPendingImport] = useState<DistributionRecord[] | null>(null);
   const [pendingRestore, setPendingRestore] = useState<{ id: string; data: DistributionDoc } | null>(
@@ -151,6 +155,21 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
       })
       .sort((a, b) => (a.date < b.date ? 1 : -1));
   }, [data.records, effectiveStart, effectiveEnd, search]);
+
+  // 저장된 등락값이 0이어도, 동일 종목 전달 대비로 화면에서 재계산
+  const changeById = useMemo(() => {
+    const map = new Map<
+      string,
+      { priceChange: number; distributionChange: number }
+    >();
+    for (const r of data.records) {
+      map.set(r.id, {
+        priceChange: calcPriceChange(r, data.records),
+        distributionChange: calcDistributionChange(r, data.records),
+      });
+    }
+    return map;
+  }, [data.records]);
 
   const filterKey = `${effectiveStart}|${effectiveEnd}|${search}`;
   const [visibleCount, setVisibleCount] = useState(10);
@@ -188,6 +207,50 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
     () => [...new Set(filtered.map((r) => r.ticker))],
     [filtered]
   );
+
+  // 자산 추가: 테이블 기록 중 달력상 지난달에 포함된 종목 → 최신 수량 매핑
+  const lastMonthTickerQuantity = useMemo(() => {
+    const lastMonth = previousMonthKey();
+    const latestByTicker = new Map<string, DistributionRecord>();
+    for (const r of data.records) {
+      if (monthKey(r.date) !== lastMonth || !r.ticker) continue;
+      const cur = latestByTicker.get(r.ticker);
+      if (!cur || cur.date < r.date) latestByTicker.set(r.ticker, r);
+    }
+    const quantityByTicker = new Map<string, number>();
+    for (const [ticker, r] of latestByTicker) {
+      quantityByTicker.set(ticker, r.quantity);
+    }
+    return quantityByTicker;
+  }, [data.records]);
+
+  const lastMonthTickerOptions = useMemo(
+    () =>
+      [...lastMonthTickerQuantity.keys()].sort((a, b) =>
+        a.localeCompare(b, "ko")
+      ),
+    [lastMonthTickerQuantity]
+  );
+
+  const tickerFieldOptions = useMemo(() => {
+    // 수정 진입 시점의 종목만 지난달 목록에 없어도 선택지에 유지
+    if (editingTicker && !lastMonthTickerOptions.includes(editingTicker)) {
+      return [editingTicker, ...lastMonthTickerOptions].sort((a, b) =>
+        a.localeCompare(b, "ko")
+      );
+    }
+    return lastMonthTickerOptions;
+  }, [editingTicker, lastMonthTickerOptions]);
+
+  function handleTickerChange(ticker: string) {
+    const lastMonthQty = lastMonthTickerQuantity.get(ticker);
+    setForm((prev) => ({
+      ...prev,
+      ticker,
+      // 지난달 동일 종목을 선택한 경우에만 수량 자동 반영
+      ...(lastMonthQty !== undefined ? { quantity: String(lastMonthQty) } : {}),
+    }));
+  }
 
   const monthlyByTicker = useMemo(() => {
     const map = new Map<string, Record<string, number>>();
@@ -245,12 +308,14 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
 
   function openAdd() {
     setEditingId(null);
+    setEditingTicker(null);
     setForm({ ...EMPTY_FORM, date: localDateString() });
     setDialogOpen(true);
   }
 
   function openEdit(record: DistributionRecord) {
     setEditingId(record.id);
+    setEditingTicker(record.ticker);
     setForm({
       ticker: record.ticker,
       date: record.date,
@@ -299,8 +364,9 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
       { quantity, distribution, taxBase },
       category
     );
-    const record: DistributionRecord = {
-      id: editingId ?? crypto.randomUUID(),
+    const recordId = editingId ?? crypto.randomUUID();
+    const draft: DistributionRecord = {
+      id: recordId,
       ticker: form.ticker,
       date: form.date,
       quantity,
@@ -313,9 +379,21 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
       taxBase,
     };
     const nextRecords = editingId
-      ? data.records.map((r) => (r.id === editingId ? record : r))
-      : [...data.records, record];
-    await save({ ...data, records: nextRecords, updatedAt: new Date().toISOString() });
+      ? data.records.map((r) => (r.id === editingId ? draft : r))
+      : [...data.records, draft];
+    const record: DistributionRecord = {
+      ...draft,
+      priceChange: calcPriceChange(draft, nextRecords),
+      distributionChange: calcDistributionChange(draft, nextRecords),
+    };
+    const recordsWithChange = nextRecords.map((r) =>
+      r.id === record.id ? record : r
+    );
+    await save({
+      ...data,
+      records: recordsWithChange,
+      updatedAt: new Date().toISOString(),
+    });
     setDialogOpen(false);
     toast.success(editingId ? "수정되었습니다" : "추가되었습니다");
   }
@@ -527,6 +605,7 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
                 <TableHead>현주가</TableHead>
                 <TableHead>주가등락</TableHead>
                 <TableHead>분배금</TableHead>
+                <TableHead>분배금등락</TableHead>
                 <TableHead>분배금총액</TableHead>
                 <TableHead>과세표준</TableHead>
                 <TableHead>과세분배액</TableHead>
@@ -537,7 +616,11 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visible.map((r) => (
+              {visible.map((r) => {
+                const { priceChange, distributionChange } = changeById.get(
+                  r.id
+                ) ?? { priceChange: 0, distributionChange: 0 };
+                return (
                 <TableRow key={r.id}>
                   <TableCell>{r.date}</TableCell>
                   <TableCell
@@ -549,17 +632,29 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
                   <TableCell>{r.price.toLocaleString()}</TableCell>
                   <TableCell
                     className={
-                      r.priceChange > 0
+                      priceChange > 0
                         ? "text-red-500"
-                        : r.priceChange < 0
+                        : priceChange < 0
                           ? "text-blue-500"
                           : "text-neutral-400"
                     }
                   >
-                    {r.priceChange > 0 ? "+" : ""}
-                    {r.priceChange.toLocaleString()}
+                    {priceChange > 0 ? "+" : ""}
+                    {priceChange.toLocaleString()}
                   </TableCell>
                   <TableCell>{r.distribution.toLocaleString()}</TableCell>
+                  <TableCell
+                    className={
+                      distributionChange > 0
+                        ? "text-red-500"
+                        : distributionChange < 0
+                          ? "text-blue-500"
+                          : "text-neutral-400"
+                    }
+                  >
+                    {distributionChange > 0 ? "+" : ""}
+                    {distributionChange.toLocaleString()}
+                  </TableCell>
                   <TableCell>{r.distributionReceived.toLocaleString()}</TableCell>
                   <TableCell>{r.taxBase.toLocaleString()}</TableCell>
                   <TableCell>{r.taxedDistribution.toLocaleString()}</TableCell>
@@ -591,10 +686,11 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={13} className="text-center text-neutral-400">
+                  <TableCell colSpan={14} className="text-center text-neutral-400">
                     {loading ? "불러오는 중..." : "데이터가 없습니다"}
                   </TableCell>
                 </TableRow>
@@ -710,9 +806,11 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <label className="col-span-2 flex flex-col gap-1 text-sm">
               종목명
-              <Input
+              <Combobox
                 value={form.ticker}
-                onChange={(e) => setForm({ ...form, ticker: e.target.value })}
+                onChange={handleTickerChange}
+                options={tickerFieldOptions}
+                placeholder="지난달 종목 선택 또는 입력"
               />
             </label>
             <label className="flex flex-col gap-1 text-sm">

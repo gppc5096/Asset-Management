@@ -1,4 +1,6 @@
 import { toCsv, parseCsv, csvRowsToRecords } from "@/lib/csv";
+import { monthKey } from "@/lib/aggregate";
+import { previousMonthKeyFromDate } from "@/lib/date";
 import type { DistributionCategory, DistributionRecord } from "@/lib/types";
 
 export const WITHHOLDING_TAX_RATE = 0.154;
@@ -40,6 +42,59 @@ export function computeDistributionAmounts(
   const taxAmount = calcTaxAmount(taxedDistribution, category);
   const total = calcNetTotal(distributionReceived, taxAmount);
   return { distributionReceived, taxedDistribution, taxAmount, total };
+}
+
+/** 동일 종목·전달(기록 일자 기준) 최신 기록. 없으면 null. */
+function findPrevMonthRecord(
+  record: Pick<DistributionRecord, "id" | "ticker" | "date">,
+  allRecords: DistributionRecord[]
+): DistributionRecord | null {
+  const prevMonth = previousMonthKeyFromDate(record.date);
+  let prev: DistributionRecord | null = null;
+  for (const r of allRecords) {
+    if (r.id === record.id) continue;
+    if (r.ticker !== record.ticker) continue;
+    if (monthKey(r.date) !== prevMonth) continue;
+    if (!prev || r.date > prev.date) prev = r;
+  }
+  return prev;
+}
+
+/**
+ * 동일 종목의 전달 최신 현주가 대비 등락.
+ * 전달 기록이 없으면 0.
+ */
+export function calcPriceChange(
+  record: Pick<DistributionRecord, "id" | "ticker" | "date" | "price">,
+  allRecords: DistributionRecord[]
+): number {
+  const prev = findPrevMonthRecord(record, allRecords);
+  if (!prev) return 0;
+  return record.price - prev.price;
+}
+
+/**
+ * 동일 종목의 전달 최신 주당 분배금 대비 등락.
+ * 전달 기록이 없으면 0.
+ */
+export function calcDistributionChange(
+  record: Pick<DistributionRecord, "id" | "ticker" | "date" | "distribution">,
+  allRecords: DistributionRecord[]
+): number {
+  const prev = findPrevMonthRecord(record, allRecords);
+  if (!prev) return 0;
+  return record.distribution - prev.distribution;
+}
+
+/** 전체 기록에 대해 주가등락·분배금등락을 다시 계산해 반영. */
+export function withComputedPriceChanges(
+  records: DistributionRecord[]
+): DistributionRecord[] {
+  return records.map((r) => ({
+    ...r,
+    priceChange: calcPriceChange(r, records),
+    distributionChange: calcDistributionChange(r, records),
+  }));
 }
 
 const DISTRIBUTION_CSV_HEADERS = [
@@ -112,5 +167,5 @@ export function parseDistributionCsv(
       ...amounts,
     });
   }
-  return result;
+  return withComputedPriceChanges(result);
 }
