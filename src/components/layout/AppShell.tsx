@@ -36,7 +36,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-dvh flex-col bg-neutral-50">
-      <header className="flex items-center justify-between border-b bg-white px-4 py-3 sm:px-6">
+      <header className="sticky top-0 z-50 flex items-center justify-between border-b bg-white/95 px-4 py-3 backdrop-blur supports-backdrop-filter:bg-white/80 sm:px-6">
         <Link href="/" className="flex items-center gap-2 font-bold text-lg">
           <LayoutGrid className="h-5 w-5 text-violet-600" />
           Asset Management
