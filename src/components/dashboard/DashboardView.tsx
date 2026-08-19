@@ -210,7 +210,7 @@ export function DashboardView() {
             {krw(summary.totalKrw)}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            적용환율 (USD/KRW) ₩{assetConfig.exchangeRate.rate.toLocaleString()} · 최근
+            적용환율 (USD/KRW) ₩{summary.appliedUsdRate.toLocaleString()} · 최근
             매수단가 기준 추정치입니다
           </p>
         </div>
@@ -463,7 +463,7 @@ export function DashboardView() {
 
       <HoldingsSummarySection
         holdings={assetConfig.holdings}
-        exchangeRate={assetConfig.exchangeRate.rate}
+        exchangeRate={summary.appliedUsdRate}
       />
     </div>
   );

@@ -232,6 +232,27 @@ export function currentHoldingsSummary(
     .sort((a, b) => b.totalBuyAmount - a.totalBuyAmount);
 }
 
+/**
+ * USD→KRW 환산 환율.
+ * 1) exchangeRate.rate > 0 이면 그대로 사용
+ * 2) 없으면 USA 보유원장에서 최근 appliedRate > 0 폴백
+ */
+export function resolveUsdKrwRate(
+  exchangeRate: ExchangeRate,
+  holdings: Holding[] = []
+): number {
+  if (Number.isFinite(exchangeRate.rate) && exchangeRate.rate > 0) {
+    return exchangeRate.rate;
+  }
+  let latest: Holding | null = null;
+  for (const h of holdings) {
+    if (h.country !== "USA") continue;
+    if (!(h.appliedRate > 0)) continue;
+    if (!latest || h.date > latest.date) latest = h;
+  }
+  return latest?.appliedRate ?? 0;
+}
+
 export function summarizeByCurrency(
   holdings: Holding[],
   cash: Cash,
@@ -247,7 +268,18 @@ export function summarizeByCurrency(
 
   const krwAssets = cash.krw + krwStockValue;
   const usdAssets = cash.usd + usdStockValue;
-  const totalKrw = krwAssets + usdAssets * exchangeRate.rate;
+  const appliedUsdRate = resolveUsdKrwRate(exchangeRate, holdings);
+  const usdAssetsKrw = usdAssets * appliedUsdRate;
+  const totalKrw = krwAssets + usdAssetsKrw;
 
-  return { krwStockValue, usdStockValue, krwAssets, usdAssets, totalKrw, positions };
+  return {
+    krwStockValue,
+    usdStockValue,
+    krwAssets,
+    usdAssets,
+    usdAssetsKrw,
+    totalKrw,
+    appliedUsdRate,
+    positions,
+  };
 }

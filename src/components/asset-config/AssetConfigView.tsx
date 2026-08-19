@@ -48,6 +48,7 @@ import { AssetFormDialog, EMPTY_ASSET_FORM } from "@/components/asset-config/Ass
 import type { AssetFormState } from "@/components/asset-config/AssetFormDialog";
 import { CashEditDialog } from "@/components/asset-config/CashEditDialog";
 import type { CashFormState } from "@/components/asset-config/CashEditDialog";
+import { ExchangeRateEditDialog } from "@/components/asset-config/ExchangeRateEditDialog";
 import { useAssetConfigContext } from "@/components/providers/AssetConfigProvider";
 import { useCloudBackup } from "@/hooks/useCloudBackup";
 import { useCsvTransfer } from "@/hooks/useCsvTransfer";
@@ -70,6 +71,8 @@ export function AssetConfigView() {
   const [cashDialogOpen, setCashDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [cashForm, setCashForm] = useState<CashFormState>({ krw: "0", usd: "0" });
+  const [rateDialogOpen, setRateDialogOpen] = useState(false);
+  const [rateForm, setRateForm] = useState("0");
   const [form, setForm] = useState<AssetFormState>(EMPTY_ASSET_FORM);
 
   const cloudBackup = useCloudBackup<AssetConfig>("asset-config", isAssetConfig, save);
@@ -155,7 +158,7 @@ export function AssetConfigView() {
 
   const currencyPie = [
     { name: "KRW 자산", value: summary.krwAssets },
-    { name: "USD 자산 (KRW환산)", value: summary.usdAssets * data.exchangeRate.rate },
+    { name: "USD 자산 (KRW환산)", value: summary.usdAssetsKrw },
   ];
 
   const accountTypePie = useMemo(() => {
@@ -261,6 +264,11 @@ export function AssetConfigView() {
     setCashDialogOpen(true);
   }
 
+  function openRateEdit() {
+    setRateForm(String(summary.appliedUsdRate || data.exchangeRate.rate || ""));
+    setRateDialogOpen(true);
+  }
+
   async function handleCashSubmit() {
     const krwValue = cashForm.krw.trim() === "" ? NaN : Number(cashForm.krw);
     const usdValue = cashForm.usd.trim() === "" ? NaN : Number(cashForm.usd);
@@ -279,6 +287,25 @@ export function AssetConfigView() {
     });
     setCashDialogOpen(false);
     toast.success("현금 잔고가 수정되었습니다");
+  }
+
+  async function handleRateSubmit() {
+    const rate = rateForm.trim() === "" ? NaN : Number(rateForm);
+    if (!Number.isFinite(rate) || rate <= 0) {
+      toast.error("적용환율은 0보다 큰 숫자여야 합니다");
+      return;
+    }
+    await save({
+      ...data,
+      exchangeRate: {
+        rate,
+        source: "manual",
+        fetchedAt: new Date().toISOString(),
+      },
+      updatedAt: new Date().toISOString(),
+    });
+    setRateDialogOpen(false);
+    toast.success("적용환율이 저장되었습니다");
   }
 
   async function confirmImport() {
@@ -312,16 +339,27 @@ export function AssetConfigView() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
-          <CardHeader className="pb-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               총 자산 (추정)
             </CardTitle>
+            <Button variant="ghost" size="icon-sm" onClick={openRateEdit} aria-label="적용환율 수정">
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold">{krw(summary.totalKrw)}</p>
             <p className="text-xs text-muted-foreground">
-              적용환율 (USD/KRW) {krw(data.exchangeRate.rate)}
+              적용환율 (USD/KRW){" "}
+              {summary.appliedUsdRate > 0
+                ? krw(summary.appliedUsdRate)
+                : "미설정 · 연필로 입력"}
             </p>
+            {summary.usdAssets > 0 && summary.appliedUsdRate > 0 && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                KRW {krw(summary.krwAssets)} + USD환산 {krw(summary.usdAssetsKrw)}
+              </p>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -598,6 +636,14 @@ export function AssetConfigView() {
         form={cashForm}
         onFormChange={setCashForm}
         onSubmit={() => void handleCashSubmit()}
+      />
+
+      <ExchangeRateEditDialog
+        open={rateDialogOpen}
+        onOpenChange={setRateDialogOpen}
+        rate={rateForm}
+        onRateChange={setRateForm}
+        onSubmit={() => void handleRateSubmit()}
       />
 
       <ConfirmDialog

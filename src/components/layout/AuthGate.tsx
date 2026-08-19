@@ -49,7 +49,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     <AppShell>
       <OnboardingModal
         totalKrw={summary.totalKrw}
-        appliedUsdRate={assetConfig.exchangeRate.rate}
+        appliedUsdRate={summary.appliedUsdRate}
         usdAssets={summary.usdAssets}
         krwAssets={summary.krwAssets}
       />
