@@ -37,21 +37,17 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
   Select,
   SelectTrigger,
   SelectValue,
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { Combobox } from "@/components/ui/combobox";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { AssetFormDialog, EMPTY_ASSET_FORM } from "@/components/asset-config/AssetFormDialog";
+import type { AssetFormState } from "@/components/asset-config/AssetFormDialog";
+import { CashEditDialog } from "@/components/asset-config/CashEditDialog";
+import type { CashFormState } from "@/components/asset-config/CashEditDialog";
 import { useAssetConfigContext } from "@/components/providers/AssetConfigProvider";
 import { useCloudBackup } from "@/hooks/useCloudBackup";
 import { useCsvTransfer } from "@/hooks/useCsvTransfer";
@@ -59,48 +55,10 @@ import { usePaginatedFilter } from "@/hooks/usePaginatedFilter";
 import { summarizeByCurrency, netPositions, holdingsToCsv, parseHoldingsCsv } from "@/lib/holdings";
 import { isAssetConfig } from "@/lib/validate";
 import { localDateString } from "@/lib/date";
-import { formatNumericInput, parseNumericInput, formatKrw as krw } from "@/lib/format";
+import { formatKrw as krw } from "@/lib/format";
 import { CHART_COLORS } from "@/lib/chartColors";
 import { ACCOUNT_TYPES } from "@/lib/types";
-import type {
-  AccountType,
-  AssetConfig,
-  AssetType,
-  Country,
-  DistributionCycle,
-  Holding,
-  TradeType,
-} from "@/lib/types";
-
-type FormState = {
-  ticker: string;
-  date: string;
-  broker: string;
-  accountNumber: string;
-  accountType: AccountType;
-  assetType: AssetType;
-  country: Country;
-  tradeType: TradeType;
-  quantity: string;
-  unitPrice: string;
-  appliedRate: string;
-  distributionCycle: DistributionCycle;
-};
-
-const EMPTY_FORM: FormState = {
-  ticker: "",
-  date: "",
-  broker: "",
-  accountNumber: "",
-  accountType: "일반계좌",
-  assetType: "ETF주식",
-  country: "KOR",
-  tradeType: "매수",
-  quantity: "",
-  unitPrice: "",
-  appliedRate: "0",
-  distributionCycle: "없음",
-};
+import type { AccountType, AssetConfig, Holding } from "@/lib/types";
 
 export function AssetConfigView() {
   const { data, loading, save } = useAssetConfigContext();
@@ -111,8 +69,8 @@ export function AssetConfigView() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [cashDialogOpen, setCashDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
-  const [cashForm, setCashForm] = useState({ krw: "0", usd: "0" });
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [cashForm, setCashForm] = useState<CashFormState>({ krw: "0", usd: "0" });
+  const [form, setForm] = useState<AssetFormState>(EMPTY_ASSET_FORM);
 
   const cloudBackup = useCloudBackup<AssetConfig>("asset-config", isAssetConfig, save);
   const csvTransfer = useCsvTransfer<Holding>(
@@ -220,7 +178,7 @@ export function AssetConfigView() {
 
   function openAdd() {
     setEditingId(null);
-    setForm({ ...EMPTY_FORM, date: localDateString() });
+    setForm({ ...EMPTY_ASSET_FORM, date: localDateString() });
     setDialogOpen(true);
   }
 
@@ -621,168 +579,26 @@ export function AssetConfigView() {
         </Card>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editingId ? "자산 수정" : "자산 추가"}</DialogTitle>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1 text-sm">
-              자산구분
-              <Select
-                value={form.assetType}
-                onValueChange={(v) => setForm({ ...form, assetType: (v as AssetType) ?? form.assetType })}
-              >
-                <SelectTrigger size="sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ETF주식">ETF주식</SelectItem>
-                  <SelectItem value="개별주식">개별주식</SelectItem>
-                </SelectContent>
-              </Select>
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              국가
-              <Select
-                value={form.country}
-                onValueChange={(v) => {
-                  const country = (v as Country) ?? form.country;
-                  // 국가가 바뀌면 더 이상 맞지 않을 수 있는 하위 필드를 초기화
-                  setForm({ ...form, country, broker: "", ticker: "", accountNumber: "" });
-                }}
-              >
-                <SelectTrigger size="sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="KOR">KOR</SelectItem>
-                  <SelectItem value="USA">USA</SelectItem>
-                </SelectContent>
-              </Select>
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              거래일
-              <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              증권사
-              <Combobox
-                value={form.broker}
-                options={formBrokerOptions}
-                placeholder="증권사 선택 또는 입력"
-                onChange={(v) => {
-                  // 증권사가 바뀌면 그 증권사에 속하지 않을 수 있는 종목명/계좌번호를 초기화
-                  setForm({ ...form, broker: v, ticker: "", accountNumber: "" });
-                }}
-              />
-            </label>
-            <label className="col-span-2 flex flex-col gap-1 text-sm">
-              종목명
-              <Combobox
-                value={form.ticker}
-                options={formTickerOptions}
-                placeholder="종목명 선택 또는 입력"
-                onChange={(v) => setForm({ ...form, ticker: v })}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              계좌번호
-              <Combobox
-                value={form.accountNumber}
-                options={formAccountNumberOptions}
-                placeholder="계좌번호 선택 또는 입력"
-                onChange={(v) => {
-                  // 기존 계좌번호와 정확히 일치하면 계좌유형을 자동으로 채움 (직접 다시 바꿀 수 있음)
-                  const matchedType = accountTypeByAccountNumber.get(v);
-                  setForm({
-                    ...form,
-                    accountNumber: v,
-                    ...(matchedType ? { accountType: matchedType } : {}),
-                  });
-                }}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              계좌유형
-              <Select
-                value={form.accountType}
-                onValueChange={(v) => setForm({ ...form, accountType: (v as AccountType) ?? form.accountType })}
-              >
-                <SelectTrigger size="sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {ACCOUNT_TYPES.map((t) => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              거래
-              <Select
-                value={form.tradeType}
-                onValueChange={(v) => setForm({ ...form, tradeType: (v as TradeType) ?? form.tradeType })}
-              >
-                <SelectTrigger size="sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="매수">매수</SelectItem>
-                  <SelectItem value="매도">매도</SelectItem>
-                </SelectContent>
-              </Select>
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              수량
-              <Input
-                type="number"
-                value={form.quantity}
-                onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              단가
-              <Input
-                type="number"
-                value={form.unitPrice}
-                onChange={(e) => setForm({ ...form, unitPrice: e.target.value })}
-              />
-            </label>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => void handleSubmit()}>저장</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AssetFormDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        editing={editingId !== null}
+        form={form}
+        onFormChange={setForm}
+        brokerOptions={formBrokerOptions}
+        tickerOptions={formTickerOptions}
+        accountNumberOptions={formAccountNumberOptions}
+        accountTypeByAccountNumber={accountTypeByAccountNumber}
+        onSubmit={() => void handleSubmit()}
+      />
 
-      <Dialog open={cashDialogOpen} onOpenChange={setCashDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>현금 잔고 수정</DialogTitle>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1 text-sm">
-              KRW 현금
-              <Input
-                type="text"
-                inputMode="decimal"
-                value={formatNumericInput(cashForm.krw)}
-                onChange={(e) =>
-                  setCashForm({ ...cashForm, krw: parseNumericInput(e.target.value) })
-                }
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              USD 현금
-              <Input
-                type="text"
-                inputMode="decimal"
-                value={formatNumericInput(cashForm.usd)}
-                onChange={(e) =>
-                  setCashForm({ ...cashForm, usd: parseNumericInput(e.target.value) })
-                }
-              />
-            </label>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => void handleCashSubmit()}>저장</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CashEditDialog
+        open={cashDialogOpen}
+        onOpenChange={setCashDialogOpen}
+        form={cashForm}
+        onFormChange={setCashForm}
+        onSubmit={() => void handleCashSubmit()}
+      />
 
       <ConfirmDialog
         open={resetDialogOpen}

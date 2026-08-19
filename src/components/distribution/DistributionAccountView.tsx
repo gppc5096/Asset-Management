@@ -27,7 +27,6 @@ import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Combobox } from "@/components/ui/combobox";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -38,13 +37,6 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
   Select,
   SelectTrigger,
   SelectValue,
@@ -52,6 +44,8 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { RecordFormDialog, EMPTY_RECORD_FORM } from "@/components/distribution/RecordFormDialog";
+import type { RecordFormState } from "@/components/distribution/RecordFormDialog";
 import { useDistributionRecords } from "@/hooks/useDistributionRecords";
 import { useCloudBackup } from "@/hooks/useCloudBackup";
 import { useCsvTransfer } from "@/hooks/useCsvTransfer";
@@ -82,26 +76,6 @@ const CATEGORY_LABEL: Record<DistributionCategory, string> = {
   "tax-free": "비과세계좌",
 };
 
-type FormState = {
-  ticker: string;
-  date: string;
-  quantity: string;
-  price: string;
-  distribution: string;
-  taxBase: string;
-  held: boolean;
-};
-
-const EMPTY_FORM: FormState = {
-  ticker: "",
-  date: "",
-  quantity: "",
-  price: "",
-  distribution: "",
-  taxBase: "",
-  held: true,
-};
-
 export function DistributionAccountView({ category, title, subtitle }: Props) {
   const { data, loading, save } = useDistributionRecords(category);
   const [search, setSearch] = useState("");
@@ -111,7 +85,7 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTicker, setEditingTicker] = useState<string | null>(null);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [form, setForm] = useState<RecordFormState>(EMPTY_RECORD_FORM);
 
   const cloudBackup = useCloudBackup<DistributionDoc>(category, isDistributionDoc, save);
   const csvTransfer = useCsvTransfer<DistributionRecord>(
@@ -288,7 +262,7 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
   function openAdd() {
     setEditingId(null);
     setEditingTicker(null);
-    setForm({ ...EMPTY_FORM, date: localDateString() });
+    setForm({ ...EMPTY_RECORD_FORM, date: localDateString() });
     setDialogOpen(true);
   }
 
@@ -714,77 +688,16 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
         </Card>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editingId ? "자산 수정" : "자산 추가"}</DialogTitle>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="col-span-2 flex flex-col gap-1 text-sm">
-              종목명
-              <Combobox
-                value={form.ticker}
-                onChange={handleTickerChange}
-                options={tickerFieldOptions}
-                placeholder="지난달 종목 선택 또는 입력"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              거래일
-              <Input
-                type="date"
-                value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              수량
-              <Input
-                type="number"
-                value={form.quantity}
-                onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              현주가
-              <Input
-                type="number"
-                value={form.price}
-                onChange={(e) => setForm({ ...form, price: e.target.value })}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              주당 분배금
-              <Input
-                type="number"
-                value={form.distribution}
-                onChange={(e) =>
-                  setForm({ ...form, distribution: e.target.value })
-                }
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              주당 과세대상 분배금
-              <Input
-                type="number"
-                value={form.taxBase}
-                onChange={(e) => setForm({ ...form, taxBase: e.target.value })}
-              />
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={form.held}
-                onChange={(e) => setForm({ ...form, held: e.target.checked })}
-              />
-              현재 보유 중
-            </label>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => void handleSubmit()}>저장</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <RecordFormDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        editing={editingId !== null}
+        form={form}
+        onFormChange={setForm}
+        tickerOptions={tickerFieldOptions}
+        onTickerChange={handleTickerChange}
+        onSubmit={() => void handleSubmit()}
+      />
 
       <ConfirmDialog
         open={resetDialogOpen}
