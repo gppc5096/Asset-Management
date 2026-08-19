@@ -1,7 +1,19 @@
 import { toCsv, parseCsv, csvRowsToRecords } from "@/lib/csv";
 import { monthKey } from "@/lib/aggregate";
-import { previousMonthKeyFromDate } from "@/lib/date";
 import type { DistributionCategory, DistributionRecord } from "@/lib/types";
+
+/** 기록 일자(YYYY-MM-DD) 기준 전달 키. date.ts와 동일 로직(모듈 HMR 의존 제거). */
+function previousMonthKeyFromDate(dateStr: string): string {
+  const y = Number(dateStr.slice(0, 4));
+  const m = Number(dateStr.slice(5, 7));
+  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) {
+    const now = new Date();
+    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
+  }
+  const prev = new Date(y, m - 2, 1);
+  return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
+}
 
 export const WITHHOLDING_TAX_RATE = 0.154;
 

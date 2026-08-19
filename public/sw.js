@@ -1,5 +1,5 @@
 // CACHE_VERSION을 배포마다 올려서 이전 캐시를 폐기한다 (버전을 고정해두면 절대 갱신되지 않음).
-const CACHE_VERSION = "2";
+const CACHE_VERSION = "3";
 const CACHE_NAME = `asset-mgmt-v${CACHE_VERSION}`;
 
 const NEVER_CACHE_HOSTS = [
@@ -26,6 +26,18 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+/** clone은 본문 소비 전에 동기적으로 수행. put은 실패해도 응답 반환을 막지 않음. */
+function putInCache(request, response) {
+  if (!response || !response.ok || response.type === "opaque") return;
+  let copy;
+  try {
+    copy = response.clone();
+  } catch {
+    return;
+  }
+  caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => {});
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
@@ -40,9 +52,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response.ok) {
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
-          }
+          putInCache(request, response);
           return response;
         })
         .catch(async () => {
@@ -59,7 +69,7 @@ self.addEventListener("fetch", (event) => {
       const cached = await cache.match(request);
       if (cached) return cached;
       const response = await fetch(request);
-      if (response.ok) cache.put(request, response.clone());
+      putInCache(request, response);
       return response;
     })
   );

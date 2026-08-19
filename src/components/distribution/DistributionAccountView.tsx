@@ -716,8 +716,8 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
           <CardHeader>
             <CardTitle className="text-sm">월별 분배금 수령액 추이 (종목별)</CardTitle>
           </CardHeader>
-          <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
+          <CardContent className="h-72 w-full min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <BarChart data={monthlyByTicker}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" fontSize={11} />
@@ -736,8 +736,8 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
           <CardHeader>
             <CardTitle className="text-sm">종목별 현주가 추이</CardTitle>
           </CardHeader>
-          <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
+          <CardContent className="h-72 w-full min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <LineChart data={priceTrend}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="date" fontSize={11} />
@@ -763,8 +763,8 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
           <CardHeader>
             <CardTitle className="text-sm">종목별 분배금 비중 (조회 기간 전체)</CardTitle>
           </CardHeader>
-          <CardContent className="h-40">
-            <ResponsiveContainer width="100%" height="100%">
+          <CardContent className="h-40 w-full min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <BarChart data={tickerShare} layout="vertical">
                 <XAxis type="number" hide domain={[0, 100]} />
                 <YAxis type="category" dataKey={() => ""} hide />
@@ -782,8 +782,8 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
           <CardHeader>
             <CardTitle className="text-sm">월별 순수령액 vs 과세금액</CardTitle>
           </CardHeader>
-          <CardContent className="h-40">
-            <ResponsiveContainer width="100%" height="100%">
+          <CardContent className="h-40 w-full min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <BarChart data={monthlyNetVsTax}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" fontSize={11} />
