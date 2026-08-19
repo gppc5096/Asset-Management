@@ -25,7 +25,6 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { toast } from "sonner";
-import { collection, doc, getDocs, setDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,7 +41,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
@@ -53,13 +51,16 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { Combobox } from "@/components/ui/combobox";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { useAssetConfigContext } from "@/components/providers/AssetConfigProvider";
-import { useAuth } from "@/components/providers/AuthProvider";
+import { useCloudBackup } from "@/hooks/useCloudBackup";
+import { useCsvTransfer } from "@/hooks/useCsvTransfer";
+import { usePaginatedFilter } from "@/hooks/usePaginatedFilter";
 import { summarizeByCurrency, netPositions, holdingsToCsv, parseHoldingsCsv } from "@/lib/holdings";
 import { isAssetConfig } from "@/lib/validate";
 import { localDateString } from "@/lib/date";
-import { formatNumericInput, parseNumericInput } from "@/lib/format";
-import { db } from "@/lib/firebaseConfig";
+import { formatNumericInput, parseNumericInput, formatKrw as krw } from "@/lib/format";
+import { CHART_COLORS } from "@/lib/chartColors";
 import { ACCOUNT_TYPES } from "@/lib/types";
 import type {
   AccountType,
@@ -70,12 +71,6 @@ import type {
   Holding,
   TradeType,
 } from "@/lib/types";
-
-const COLORS = ["#7c3aed", "#f97316", "#0ea5e9", "#22c55e", "#ef4444", "#eab308", "#ec4899", "#14b8a6"];
-
-function krw(n: number) {
-  return `₩${Math.round(n).toLocaleString()}`;
-}
 
 type FormState = {
   ticker: string;
@@ -108,7 +103,6 @@ const EMPTY_FORM: FormState = {
 };
 
 export function AssetConfigView() {
-  const { user } = useAuth();
   const { data, loading, save } = useAssetConfigContext();
   const [search, setSearch] = useState("");
   const [accountTypeFilter, setAccountTypeFilter] = useState<string>("전체");
@@ -117,12 +111,15 @@ export function AssetConfigView() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [cashDialogOpen, setCashDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
-  const [pendingImport, setPendingImport] = useState<Holding[] | null>(null);
-  const [pendingRestore, setPendingRestore] = useState<{ id: string; data: AssetConfig } | null>(
-    null
-  );
   const [cashForm, setCashForm] = useState({ krw: "0", usd: "0" });
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+
+  const cloudBackup = useCloudBackup<AssetConfig>("asset-config", isAssetConfig, save);
+  const csvTransfer = useCsvTransfer<Holding>(
+    holdingsToCsv,
+    parseHoldingsCsv,
+    "CSV 형식이 올바르지 않습니다 (주식구분,국가,거래일,증권사,종목명,계좌번호,계좌유형,거래유형,분배주기,매입단가,수량,매수금액,매도금액,적용환율 헤더 필요)"
+  );
 
   const brokers = useMemo(
     () => [...new Set(data.holdings.map((h) => h.broker))].filter(Boolean),
@@ -189,13 +186,7 @@ export function AssetConfigView() {
   }, [data.holdings, accountTypeFilter, brokerFilter, search]);
 
   const filterKey = `${accountTypeFilter}|${brokerFilter}|${search}`;
-  const [visibleCount, setVisibleCount] = useState(10);
-  const [lastFilterKey, setLastFilterKey] = useState(filterKey);
-  if (filterKey !== lastFilterKey) {
-    setLastFilterKey(filterKey);
-    setVisibleCount(10);
-  }
-  const visible = filtered.slice(0, visibleCount);
+  const { visible, visibleCount, showMore } = usePaginatedFilter(filtered, filterKey);
 
   const summary = useMemo(
     () => summarizeByCurrency(data.holdings, data.cash, data.exchangeRate),
@@ -332,82 +323,15 @@ export function AssetConfigView() {
     toast.success("현금 잔고가 수정되었습니다");
   }
 
-  function handleExport() {
-    const csv = holdingsToCsv(data.holdings);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${localDateString()}-자산관리_내보내기.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function handleImport() {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".csv,text/csv";
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const text = await file.text();
-      const holdings = parseHoldingsCsv(text);
-      if (!holdings) {
-        toast.error(
-          "CSV 형식이 올바르지 않습니다 (주식구분,국가,거래일,증권사,종목명,계좌번호,계좌유형,거래유형,분배주기,매입단가,수량,매수금액,매도금액,적용환율 헤더 필요)"
-        );
-        return;
-      }
-      if (holdings.length === 0) {
-        toast.error("가져올 수 있는 유효한 행이 없습니다");
-        return;
-      }
-      setPendingImport(holdings);
-    };
-    input.click();
-  }
-
   async function confirmImport() {
-    if (!pendingImport) return;
-    await save({ ...data, holdings: pendingImport, updatedAt: new Date().toISOString() });
-    setPendingImport(null);
+    if (!csvTransfer.pendingImport) return;
+    await save({
+      ...data,
+      holdings: csvTransfer.pendingImport,
+      updatedAt: new Date().toISOString(),
+    });
+    csvTransfer.cancelImport();
     toast.success("가져오기 완료");
-  }
-
-  async function handleCloudBackup() {
-    if (!user) return;
-    const backupId = `asset-config-backup-${new Date().toISOString()}`;
-    await setDoc(doc(db, "users", user.uid, "backups", backupId), data);
-    toast.success("클라우드에 백업되었습니다", {
-      style: { background: "#c4f5e4" },
-    });
-  }
-
-  async function handleCloudRestore() {
-    if (!user) return;
-    const snap = await getDocs(collection(db, "users", user.uid, "backups"));
-    const backups = snap.docs
-      .filter((d) => d.id.startsWith("asset-config-backup-"))
-      .sort((a, b) => (a.id < b.id ? 1 : -1));
-    if (backups.length === 0) {
-      toast.error("복원할 백업이 없습니다");
-      return;
-    }
-    const latestData = backups[0].data();
-    if (!isAssetConfig(latestData)) {
-      toast.error("백업 데이터 형식이 올바르지 않습니다");
-      return;
-    }
-    setPendingRestore({ id: backups[0].id, data: latestData });
-  }
-
-  async function confirmRestore() {
-    if (!pendingRestore) return;
-    await save(pendingRestore.data);
-    setPendingRestore(null);
-    toast.success("복원되었습니다", {
-      style: { background: "#c4f5e4" },
-    });
   }
 
   async function handleReset() {
@@ -515,16 +439,22 @@ export function AssetConfigView() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="outline" size="sm" onClick={handleExport}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            csvTransfer.exportCsv(data.holdings, `${localDateString()}-자산관리_내보내기.csv`)
+          }
+        >
           <Download className="mr-1 h-4 w-4" /> 내보내기
         </Button>
-        <Button variant="outline" size="sm" onClick={handleImport} disabled={loading}>
+        <Button variant="outline" size="sm" onClick={csvTransfer.pickImportFile} disabled={loading}>
           <Upload className="mr-1 h-4 w-4" /> 가져오기
         </Button>
-        <Button variant="outline" size="sm" onClick={() => void handleCloudBackup()} disabled={loading}>
+        <Button variant="outline" size="sm" onClick={() => void cloudBackup.backup(data)} disabled={loading}>
           <CloudUpload className="mr-1 h-4 w-4" /> 클라우드 백업
         </Button>
-        <Button variant="outline" size="sm" onClick={() => void handleCloudRestore()} disabled={loading}>
+        <Button variant="outline" size="sm" onClick={() => void cloudBackup.requestRestore()} disabled={loading}>
           <CloudDownload className="mr-1 h-4 w-4" /> 클라우드 복원
         </Button>
         <Button
@@ -600,11 +530,7 @@ export function AssetConfigView() {
           </Table>
           {visibleCount < filtered.length && (
             <div className="flex justify-center pt-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setVisibleCount((c) => c + 10)}
-              >
+              <Button variant="outline" size="sm" onClick={showMore}>
                 더보기 ({visible.length} / {filtered.length})
               </Button>
             </div>
@@ -622,7 +548,7 @@ export function AssetConfigView() {
               <PieChart>
                 <Pie data={currencyPie} dataKey="value" nameKey="name" innerRadius={50} outerRadius={80}>
                   {currencyPie.map((_, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip formatter={(v) => krw(Number(v))} />
@@ -667,7 +593,7 @@ export function AssetConfigView() {
               <PieChart>
                 <Pie data={accountTypePie} dataKey="value" nameKey="name" innerRadius={50} outerRadius={80}>
                   {accountTypePie.map((_, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip formatter={(v) => krw(Number(v))} />
@@ -858,67 +784,32 @@ export function AssetConfigView() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>전체 자산 데이터 초기화</DialogTitle>
-            <DialogDescription>
-              보유 종목, 현금 잔고가 모두 삭제됩니다. 이 작업은 되돌릴 수 없습니다. 계속할까요?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setResetDialogOpen(false)}>
-              취소
-            </Button>
-            <Button variant="destructive" onClick={() => void handleReset()}>
-              초기화
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={resetDialogOpen}
+        onOpenChange={setResetDialogOpen}
+        title="전체 자산 데이터 초기화"
+        description="보유 종목, 현금 잔고가 모두 삭제됩니다. 이 작업은 되돌릴 수 없습니다. 계속할까요?"
+        confirmLabel="초기화"
+        onConfirm={() => void handleReset()}
+      />
 
-      <Dialog open={pendingImport !== null} onOpenChange={(open) => !open && setPendingImport(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>가져오기 확인</DialogTitle>
-            <DialogDescription>
-              현재 {data.holdings.length}건을 가져온 {pendingImport?.length ?? 0}건으로
-              교체합니다. 이 작업은 되돌릴 수 없습니다. 계속할까요?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPendingImport(null)}>
-              취소
-            </Button>
-            <Button variant="destructive" onClick={() => void confirmImport()}>
-              가져오기
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={csvTransfer.pendingImport !== null}
+        onOpenChange={(open) => !open && csvTransfer.cancelImport()}
+        title="가져오기 확인"
+        description={`현재 ${data.holdings.length}건을 가져온 ${csvTransfer.pendingImport?.length ?? 0}건으로 교체합니다. 이 작업은 되돌릴 수 없습니다. 계속할까요?`}
+        confirmLabel="가져오기"
+        onConfirm={() => void confirmImport()}
+      />
 
-      <Dialog
-        open={pendingRestore !== null}
-        onOpenChange={(open) => !open && setPendingRestore(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>클라우드 복원 확인</DialogTitle>
-            <DialogDescription>
-              가장 최근 백업({pendingRestore?.id})으로 현재 데이터를 덮어씁니다. 이 작업은
-              되돌릴 수 없습니다. 계속할까요?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPendingRestore(null)}>
-              취소
-            </Button>
-            <Button variant="destructive" onClick={() => void confirmRestore()}>
-              복원
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={cloudBackup.pendingRestore !== null}
+        onOpenChange={(open) => !open && cloudBackup.cancelRestore()}
+        title="클라우드 복원 확인"
+        description={`가장 최근 백업(${cloudBackup.pendingRestore?.id})으로 현재 데이터를 덮어씁니다. 이 작업은 되돌릴 수 없습니다. 계속할까요?`}
+        confirmLabel="복원"
+        onConfirm={() => void cloudBackup.confirmRestore()}
+      />
     </div>
   );
 }

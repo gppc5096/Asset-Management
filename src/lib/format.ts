@@ -16,3 +16,8 @@ export function formatNumericInput(raw: string): string {
   const withCommas = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   return decPart !== undefined ? `${withCommas}.${decPart}` : withCommas;
 }
+
+/** 원화 금액을 "₩1,234" 형태로 반올림 표시. */
+export function formatKrw(n: number): string {
+  return `₩${Math.round(n).toLocaleString()}`;
+}
