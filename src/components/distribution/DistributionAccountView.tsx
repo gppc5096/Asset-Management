@@ -28,7 +28,7 @@ import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Combobox } from "@/components/ui/combobox";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -65,7 +65,7 @@ import { monthKey } from "@/lib/aggregate";
 import { db } from "@/lib/firebaseConfig";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { isDistributionDoc } from "@/lib/validate";
-import { localDateString, previousMonthKey } from "@/lib/date";
+import { localDateString } from "@/lib/date";
 import type { DistributionCategory, DistributionDoc, DistributionRecord } from "@/lib/types";
 
 type Props = {
@@ -127,7 +127,6 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
   const [endMonth, setEndMonth] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingTicker, setEditingTicker] = useState<string | null>(null);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [pendingImport, setPendingImport] = useState<DistributionRecord[] | null>(null);
   const [pendingRestore, setPendingRestore] = useState<{ id: string; data: DistributionDoc } | null>(
@@ -208,12 +207,17 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
     [filtered]
   );
 
-  // 자산 추가: 테이블 기록 중 달력상 지난달에 포함된 종목 → 최신 수량 매핑
-  const lastMonthTickerQuantity = useMemo(() => {
-    const lastMonth = previousMonthKey();
+  // 자산 추가: 전체 기록 중 데이터가 있는 가장 최근 2개월을 기준으로, 두 달에 등장한
+  // 종목별 최신 수량을 선택지로 제공 (이 페이지 계좌 유형의 데이터만 담긴 문서)
+  const referenceMonthQuantity = useMemo(() => {
+    const recentMonths = new Set(
+      [...new Set(data.records.map((r) => monthKey(r.date)))]
+        .sort()
+        .slice(-2)
+    );
     const latestByTicker = new Map<string, DistributionRecord>();
     for (const r of data.records) {
-      if (monthKey(r.date) !== lastMonth || !r.ticker) continue;
+      if (!recentMonths.has(monthKey(r.date)) || !r.ticker) continue;
       const cur = latestByTicker.get(r.ticker);
       if (!cur || cur.date < r.date) latestByTicker.set(r.ticker, r);
     }
@@ -224,31 +228,30 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
     return quantityByTicker;
   }, [data.records]);
 
-  const lastMonthTickerOptions = useMemo(
-    () =>
-      [...lastMonthTickerQuantity.keys()].sort((a, b) =>
-        a.localeCompare(b, "ko")
-      ),
-    [lastMonthTickerQuantity]
-  );
+  const tickerFieldOptions = useMemo<ComboboxOption[]>(() => {
+    // 입력 대상 월(거래일 기준)에 이미 등록된 종목. 수정 중인 기록 자신은 제외
+    const targetMonth = monthKey(form.date);
+    const registered = new Set(
+      data.records
+        .filter((r) => r.id !== editingId && monthKey(r.date) === targetMonth)
+        .map((r) => r.ticker)
+    );
+    return [...referenceMonthQuantity.entries()]
+      .sort(([a], [b]) => a.localeCompare(b, "ko"))
+      .map(([ticker, quantity]) => ({
+        value: ticker,
+        detail: `${quantity.toLocaleString()}주`,
+        badge: registered.has(ticker) ? "이미 등록됨" : undefined,
+      }));
+  }, [referenceMonthQuantity, data.records, form.date, editingId]);
 
-  const tickerFieldOptions = useMemo(() => {
-    // 수정 진입 시점의 종목만 지난달 목록에 없어도 선택지에 유지
-    if (editingTicker && !lastMonthTickerOptions.includes(editingTicker)) {
-      return [editingTicker, ...lastMonthTickerOptions].sort((a, b) =>
-        a.localeCompare(b, "ko")
-      );
-    }
-    return lastMonthTickerOptions;
-  }, [editingTicker, lastMonthTickerOptions]);
-
-  function handleTickerChange(ticker: string) {
-    const lastMonthQty = lastMonthTickerQuantity.get(ticker);
+  // 목록에서 선택했을 때만 종목명+수량을 채움 (직접 타이핑은 종목명만 갱신)
+  function handleTickerSelect(ticker: string) {
+    const quantity = referenceMonthQuantity.get(ticker);
     setForm((prev) => ({
       ...prev,
       ticker,
-      // 지난달 동일 종목을 선택한 경우에만 수량 자동 반영
-      ...(lastMonthQty !== undefined ? { quantity: String(lastMonthQty) } : {}),
+      ...(quantity !== undefined ? { quantity: String(quantity) } : {}),
     }));
   }
 
@@ -308,14 +311,12 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
 
   function openAdd() {
     setEditingId(null);
-    setEditingTicker(null);
     setForm({ ...EMPTY_FORM, date: localDateString() });
     setDialogOpen(true);
   }
 
   function openEdit(record: DistributionRecord) {
     setEditingId(record.id);
-    setEditingTicker(record.ticker);
     setForm({
       ticker: record.ticker,
       date: record.date,
@@ -808,9 +809,10 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
               종목명
               <Combobox
                 value={form.ticker}
-                onChange={handleTickerChange}
+                onChange={(ticker) => setForm((prev) => ({ ...prev, ticker }))}
+                onSelect={handleTickerSelect}
                 options={tickerFieldOptions}
-                placeholder="지난달 종목 선택 또는 입력"
+                placeholder="기존 종목 선택 또는 새 종목명 직접 입력"
               />
             </label>
             <label className="flex flex-col gap-1 text-sm">
