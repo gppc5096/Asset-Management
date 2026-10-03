@@ -18,37 +18,12 @@ import {
 } from "@/components/ui/select";
 import { Combobox } from "@/components/ui/combobox";
 import { ACCOUNT_TYPES } from "@/lib/types";
-import type { AccountType, AssetType, Country, DistributionCycle, TradeType } from "@/lib/types";
+import { EMPTY_ASSET_FORM, type AssetFormState } from "@/lib/assetForm";
+import type { AccountType, AssetType, Country, TradeType } from "@/lib/types";
 
-export type AssetFormState = {
-  ticker: string;
-  date: string;
-  broker: string;
-  accountNumber: string;
-  accountType: AccountType;
-  assetType: AssetType;
-  country: Country;
-  tradeType: TradeType;
-  quantity: string;
-  unitPrice: string;
-  appliedRate: string;
-  distributionCycle: DistributionCycle;
-};
-
-export const EMPTY_ASSET_FORM: AssetFormState = {
-  ticker: "",
-  date: "",
-  broker: "",
-  accountNumber: "",
-  accountType: "일반계좌",
-  assetType: "ETF주식",
-  country: "KOR",
-  tradeType: "매수",
-  quantity: "",
-  unitPrice: "",
-  appliedRate: "0",
-  distributionCycle: "없음",
-};
+// 폼 타입/초기값은 lib/assetForm으로 이동했고, 기존 import 경로 호환을 위해 재수출한다.
+export { EMPTY_ASSET_FORM };
+export type { AssetFormState };
 
 type Props = {
   open: boolean;

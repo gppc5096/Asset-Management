@@ -11,26 +11,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import type { TickerSuggestion } from "@/lib/tickerSuggestions";
+import { EMPTY_RECORD_FORM, type RecordFormState } from "@/lib/distributionForm";
 
-export type RecordFormState = {
-  ticker: string;
-  date: string;
-  quantity: string;
-  price: string;
-  distribution: string;
-  taxBase: string;
-  held: boolean;
-};
-
-export const EMPTY_RECORD_FORM: RecordFormState = {
-  ticker: "",
-  date: "",
-  quantity: "",
-  price: "",
-  distribution: "",
-  taxBase: "",
-  held: true,
-};
+// 폼 타입/초기값은 lib/distributionForm으로 이동했고, 기존 import 경로 호환을 위해 재수출한다.
+export { EMPTY_RECORD_FORM };
+export type { RecordFormState };
 
 type Props = {
   open: boolean;

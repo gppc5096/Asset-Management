@@ -1,0 +1,51 @@
+name: CI
+
+# PR과 main 푸시마다 타입체크 · 린트 · 테스트 · 빌드를 실행해 깨진 변경이 병합/배포되기 전에 잡는다.
+# (배포는 하지 않는다 — 배포는 수동으로 `npm run deploy`)
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # 빌드가 Firebase 설정값을 참조하지만 실제 연결은 하지 않는다. 비밀값이 아닌 더미 값으로 충분하다.
+      NEXT_PUBLIC_FIREBASE_API_KEY: ci-dummy-api-key
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ci-dummy.firebaseapp.com
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ci-dummy
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ci-dummy.appspot.com
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "0"
+      NEXT_PUBLIC_FIREBASE_APP_ID: ci-dummy-app-id
+      NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: G-CIDUMMY
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
