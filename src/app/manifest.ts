@@ -9,8 +9,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "개인 자산 및 배당금 관리 대시보드",
     start_url: "/",
     display: "standalone",
-    background_color: "#ffffff",
-    theme_color: "#4F46E5",
+    background_color: "#0a0e17",
+    theme_color: "#0a0e17",
     icons: [
       {
         src: "/icons/icon-192.png",

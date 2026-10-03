@@ -50,9 +50,9 @@ export function HoldingsSummarySection({ holdings, exchangeRate }: Props) {
       <CardContent className="pt-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 font-bold">
-            <Globe className="h-5 w-5 text-violet-600" />
+            <Globe className="h-5 w-5 text-primary" />
             현재 보유 종목 현황
-            <span className="text-sm font-normal text-neutral-400">(잔량 기준)</span>
+            <span className="text-sm font-normal text-muted-foreground">(잔량 기준)</span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex rounded-full border p-1">
@@ -69,8 +69,8 @@ export function HoldingsSummarySection({ holdings, exchangeRate }: Props) {
                   className={cn(
                     "rounded-full px-3 py-1 text-sm font-medium transition-colors",
                     groupBy === opt.key
-                      ? "bg-violet-600 text-white"
-                      : "text-neutral-500 hover:text-neutral-800"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {opt.label}
@@ -84,8 +84,8 @@ export function HoldingsSummarySection({ holdings, exchangeRate }: Props) {
                 className={cn(
                   "rounded-full px-3 py-1 text-sm font-medium transition-colors",
                   currency === "USD"
-                    ? "bg-violet-600 text-white"
-                    : "text-neutral-500 hover:text-neutral-800"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
                 )}
               >
                 🇺🇸 USD {usdCount}
@@ -96,8 +96,8 @@ export function HoldingsSummarySection({ holdings, exchangeRate }: Props) {
                 className={cn(
                   "rounded-full px-3 py-1 text-sm font-medium transition-colors",
                   currency === "KOR"
-                    ? "bg-violet-600 text-white"
-                    : "text-neutral-500 hover:text-neutral-800"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
                 )}
               >
                 🇰🇷 KOR {korCount}
@@ -109,14 +109,14 @@ export function HoldingsSummarySection({ holdings, exchangeRate }: Props) {
         <div className="mt-4 flex flex-wrap items-baseline justify-between gap-2 text-sm">
           <div>
             총 매입금액 ({currency === "USD" ? "USD" : "KRW"}){" "}
-            <span className="font-bold text-violet-600">
+            <span className="font-bold text-primary">
               {currency === "USD" ? usd(totalBuyAmount) : krw(totalBuyAmount)}
             </span>
             {currency === "USD" && (
-              <span className="text-neutral-400"> ≈ {krw(totalBuyAmountKrw)}</span>
+              <span className="text-muted-foreground"> ≈ {krw(totalBuyAmountKrw)}</span>
             )}
           </div>
-          <div className="text-neutral-400">적용환율 {krw(exchangeRate)}</div>
+          <div className="text-muted-foreground">적용환율 {krw(exchangeRate)}</div>
         </div>
 
         <div className="mt-4 overflow-x-auto">
@@ -148,7 +148,7 @@ export function HoldingsSummarySection({ holdings, exchangeRate }: Props) {
                   <TableCell>
                     <div className="font-medium">{r.ticker}</div>
                     {r.accountNumber !== "-" && (
-                      <div className="text-xs text-neutral-400">{r.accountNumber}</div>
+                      <div className="text-xs text-muted-foreground">{r.accountNumber}</div>
                     )}
                   </TableCell>
                   <TableCell>{r.accountType}</TableCell>
@@ -157,8 +157,8 @@ export function HoldingsSummarySection({ holdings, exchangeRate }: Props) {
                   <TableCell>{r.netQuantity.toLocaleString()} 주</TableCell>
                   {currency === "USD" ? (
                     <>
-                      <TableCell className="text-violet-600">{usd(r.avgUnitPrice)}</TableCell>
-                      <TableCell className="text-violet-600">{usd(r.totalBuyAmount)}</TableCell>
+                      <TableCell className="text-primary">{usd(r.avgUnitPrice)}</TableCell>
+                      <TableCell className="text-primary">{usd(r.totalBuyAmount)}</TableCell>
                       <TableCell className="font-medium">
                         {krw(r.totalBuyAmount * exchangeRate)}
                       </TableCell>
@@ -175,13 +175,13 @@ export function HoldingsSummarySection({ holdings, exchangeRate }: Props) {
                 <TableRow>
                   <TableCell
                     colSpan={currency === "USD" ? 8 : 7}
-                    className="text-center text-neutral-400"
+                    className="text-center text-muted-foreground"
                   >
                     데이터가 없습니다
                   </TableCell>
                 </TableRow>
               )}
-              <TableRow className="bg-neutral-900 font-bold text-white hover:bg-neutral-900">
+              <TableRow className="bg-secondary font-bold text-foreground hover:bg-secondary">
                 <TableCell colSpan={6}>합계</TableCell>
                 {currency === "USD" ? (
                   <>
