@@ -1,5 +1,5 @@
 // CACHE_VERSION을 배포마다 올려서 이전 캐시를 폐기한다 (버전을 고정해두면 절대 갱신되지 않음).
-const CACHE_VERSION = "3";
+const CACHE_VERSION = "4";
 const CACHE_NAME = `asset-mgmt-v${CACHE_VERSION}`;
 
 const NEVER_CACHE_HOSTS = [
