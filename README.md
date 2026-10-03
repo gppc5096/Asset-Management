@@ -71,9 +71,10 @@ npm run dev
 정적 export 후 Firebase Hosting에 배포합니다.
 
 ```bash
-npm run build
-firebase deploy --only hosting
+npm run deploy
 ```
+
+`npm run deploy`는 `npm run build` 후 `firebase deploy --only hosting --project asset-managent`를 실행합니다. Firebase CLI에 `asset-managent` 프로젝트 권한이 있는 계정으로 로그인되어 있어야 합니다.
 
 ## 데이터 구조 (Firestore)
 
