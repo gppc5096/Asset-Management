@@ -7,7 +7,7 @@
 - **Google 로그인** (Firebase Auth) — 계정별 데이터 완전 분리
 - **대시보드** — 총 자산 현황(KRW 환산), 연도별/월별 배당 수령액 추이, 과세분배금·과세금액 현황, 종목별 분배금·주가 콤보차트
 - **계좌별 분배금 관리** (특별계좌 / 일반계좌 / 비과세계좌) — 조회기간 필터, 검색, 종목 추가/수정/삭제, 내보내기/가져오기(JSON), 클라우드 백업/복원, 월별 추이·현주가 추이·비중 차트
-- **자산관리(보유 종목 원장)** — 매수/매도 거래 기록, 국가 → 증권사 → 종목명/계좌번호 계단식 자동완성, 계좌번호 선택 시 계좌유형 자동 매칭, KRW/USD 현금 잔고 관리
+- **자산관리(보유 종목 원장)** — 매수/매도 거래 기록, 국가 → 증권사 → 종목명/계좌번호 계단식 자동완성, 계좌번호 선택 시 계좌유형 자동 매칭, KRW/USD 현금 잔고 관리, 적용환율 수동 입력 및 **자동 조회**("총 자산 (추정)" 카드의 연필 → "자동 조회", 확인 후 저장)
 - **모바일 반응형** — 데스크톱 상단 탭 / 모바일 하단 탭바
 - **PWA** — 홈 화면 설치, 오프라인 캐싱(서비스 워커)
 
@@ -18,6 +18,7 @@
 - [Firebase](https://firebase.google.com) — Authentication(Google), Firestore
 - [Recharts](https://recharts.org)
 - Firebase Hosting 배포
+- Vitest + Testing Library (테스트), GitHub Actions (CI)
 
 ## 세금 계산 로직
 
@@ -75,6 +76,18 @@ npm run deploy
 ```
 
 `npm run deploy`는 `npm run build` 후 `firebase deploy --only hosting --project asset-managent`를 실행합니다. Firebase CLI에 `asset-managent` 프로젝트 권한이 있는 계정으로 로그인되어 있어야 합니다.
+
+### 5. 테스트 · 품질 점검
+
+```bash
+npm test            # 단위·화면 테스트 (Vitest)
+npm run typecheck   # 타입 검사
+npm run lint        # ESLint
+```
+
+- 계산 로직(`src/lib`)은 단위 테스트로, 분배금/자산관리 화면은 화면 출력 스냅샷(`__tests__/__snapshots__`)과 저장 동작 테스트로 고정되어 있습니다. 화면 구조를 바꿔도 출력이 같다는 것을 스냅샷이 보장합니다.
+- 화면 출력을 **의도적으로** 바꾼 경우에만 `npx vitest run -u`로 스냅샷을 갱신하고, 변경 내용을 diff로 확인하세요.
+- PR과 `main` 푸시마다 GitHub Actions(`.github/workflows/ci.yml`)가 타입체크 · 린트 · 테스트 · 빌드를 자동 실행합니다. 배포는 하지 않으며 수동(`npm run deploy`)입니다.
 
 ## 데이터 구조 (Firestore)
 

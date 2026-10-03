@@ -1,68 +1,43 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  Plus,
-  Download,
-  Upload,
-  CloudUpload,
-  CloudDownload,
-  RotateCcw,
-  Pencil,
-  Trash2,
-} from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { RecordFormDialog, EMPTY_RECORD_FORM } from "@/components/distribution/RecordFormDialog";
-import type { RecordFormState } from "@/components/distribution/RecordFormDialog";
+import { DataToolbar } from "@/components/shared/DataToolbar";
+import { LoadErrorNotice } from "@/components/shared/LoadErrorNotice";
+import { DistributionCharts } from "@/components/distribution/DistributionCharts";
+import { DistributionPeriodFilter } from "@/components/distribution/DistributionPeriodFilter";
+import { DistributionSummaryCards } from "@/components/distribution/DistributionSummaryCards";
+import { DistributionTable } from "@/components/distribution/DistributionTable";
+import { RecordFormDialog } from "@/components/distribution/RecordFormDialog";
 import { useDistributionRecords } from "@/hooks/useDistributionRecords";
 import { useCloudBackup } from "@/hooks/useCloudBackup";
 import { useCsvTransfer } from "@/hooks/useCsvTransfer";
 import { usePaginatedFilter } from "@/hooks/usePaginatedFilter";
+import { distributionRecordsToCsv, parseDistributionCsv } from "@/lib/tax";
 import {
-  calcDistributionChange,
-  calcPriceChange,
-  computeDistributionAmounts,
-  distributionRecordsToCsv,
-  parseDistributionCsv,
-} from "@/lib/tax";
-import { monthKey } from "@/lib/aggregate";
+  buildChangeById,
+  filterRecords,
+  listMonths,
+  monthlyByTicker,
+  monthlyNetVsTax,
+  priceTrend,
+  sumDistributionReceived,
+  summarizeHeld,
+  tickerShare,
+  uniqueTickers,
+} from "@/lib/distributionStats";
+import {
+  EMPTY_RECORD_FORM,
+  buildRecordSubmission,
+  formFromRecord,
+  type RecordFormState,
+} from "@/lib/distributionForm";
+import { MSG_SAVE_FAILED, runSafely } from "@/lib/runSafely";
 import { isDistributionDoc } from "@/lib/validate";
 import { localDateString } from "@/lib/date";
 import { buildTickerSuggestions } from "@/lib/tickerSuggestions";
-import { formatKrw as krw } from "@/lib/format";
-import { colorForIndex } from "@/lib/chartColors";
 import type { DistributionCategory, DistributionDoc, DistributionRecord } from "@/lib/types";
 
 type Props = {
@@ -78,13 +53,14 @@ const CATEGORY_LABEL: Record<DistributionCategory, string> = {
 };
 
 export function DistributionAccountView({ category, title, subtitle }: Props) {
-  const { data, loading, save } = useDistributionRecords(category);
+  const { data, loading, loadError, save } = useDistributionRecords(category);
   const [search, setSearch] = useState("");
   const [startMonth, setStartMonth] = useState<string>("");
   const [endMonth, setEndMonth] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState<RecordFormState>(EMPTY_RECORD_FORM);
 
   const cloudBackup = useCloudBackup<DistributionDoc>(category, isDistributionDoc, save);
@@ -94,70 +70,29 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
     "CSV 형식이 올바르지 않습니다 (거래일,종목명,주식수량,현주가,분배금,과세표준,보유여부 헤더 필요)"
   );
 
-  const months = useMemo(() => {
-    const set = new Set(data.records.map((r) => monthKey(r.date)));
-    return [...set].sort();
-  }, [data.records]);
-
+  const months = useMemo(() => listMonths(data.records), [data.records]);
   const effectiveStart = startMonth || months[0] || "";
   const effectiveEnd = endMonth || months[months.length - 1] || "";
 
-  const filtered = useMemo(() => {
-    return data.records
-      .filter((r) => {
-        const mk = monthKey(r.date);
-        if (effectiveStart && mk < effectiveStart) return false;
-        if (effectiveEnd && mk > effectiveEnd) return false;
-        if (search && !r.ticker.toLowerCase().includes(search.toLowerCase()))
-          return false;
-        return true;
-      })
-      .sort((a, b) => (a.date < b.date ? 1 : -1));
-  }, [data.records, effectiveStart, effectiveEnd, search]);
-
-  // 저장된 등락값이 0이어도, 동일 종목 전달 대비로 화면에서 재계산
-  const changeById = useMemo(() => {
-    const map = new Map<
-      string,
-      { priceChange: number; distributionChange: number }
-    >();
-    for (const r of data.records) {
-      map.set(r.id, {
-        priceChange: calcPriceChange(r, data.records),
-        distributionChange: calcDistributionChange(r, data.records),
-      });
-    }
-    return map;
-  }, [data.records]);
+  const filtered = useMemo(
+    () => filterRecords(data.records, { start: effectiveStart, end: effectiveEnd, search }),
+    [data.records, effectiveStart, effectiveEnd, search]
+  );
+  const changeById = useMemo(() => buildChangeById(data.records), [data.records]);
 
   const filterKey = `${effectiveStart}|${effectiveEnd}|${search}`;
   const { visible, visibleCount, showMore } = usePaginatedFilter(filtered, filterKey);
 
-  const latestPerTicker = useMemo(() => {
-    const map = new Map<string, DistributionRecord>();
-    for (const r of filtered) {
-      const cur = map.get(r.ticker);
-      if (!cur || cur.date < r.date) map.set(r.ticker, r);
-    }
-    // 종목별 최신 기록이 매도(보유여부="무")면 더 이상 보유 중이 아니므로 합계에서 제외
-    return [...map.values()].filter((r) => r.held);
-  }, [filtered]);
-
-  const totalQuantity = latestPerTicker.reduce((a, r) => a + r.quantity, 0);
-  const weightedAvgPrice =
-    totalQuantity > 0
-      ? Math.round(
-          latestPerTicker.reduce((a, r) => a + r.price * r.quantity, 0) /
-            totalQuantity
-        )
-      : 0;
-  const distributionSum = filtered.reduce(
-    (a, r) => a + r.distributionReceived,
-    0
-  );
-
-  const tickers = useMemo(
-    () => [...new Set(filtered.map((r) => r.ticker))],
+  const { totalQuantity, weightedAvgPrice } = useMemo(() => summarizeHeld(filtered), [filtered]);
+  const distributionSum = useMemo(() => sumDistributionReceived(filtered), [filtered]);
+  const tickers = useMemo(() => uniqueTickers(filtered), [filtered]);
+  const charts = useMemo(
+    () => ({
+      monthlyByTicker: monthlyByTicker(filtered),
+      priceTrend: priceTrend(filtered),
+      tickerShare: tickerShare(filtered),
+      monthlyNetVsTax: monthlyNetVsTax(filtered),
+    }),
     [filtered]
   );
 
@@ -177,60 +112,6 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
     }));
   }
 
-  const monthlyByTicker = useMemo(() => {
-    const map = new Map<string, Record<string, number>>();
-    for (const r of filtered) {
-      const mk = monthKey(r.date);
-      const row = map.get(mk) ?? {};
-      row[r.ticker] = (row[r.ticker] ?? 0) + r.total;
-      map.set(mk, row);
-    }
-    return [...map.entries()]
-      .sort(([a], [b]) => (a < b ? -1 : 1))
-      .map(([month, row]) => ({ month, ...row }));
-  }, [filtered]);
-
-  const priceTrend = useMemo(() => {
-    const dateSet = [...new Set(filtered.map((r) => r.date))].sort();
-    return dateSet.map((date) => {
-      const row: Record<string, number | string> = { date };
-      for (const r of filtered.filter((x) => x.date === date)) {
-        row[r.ticker] = r.price;
-      }
-      return row;
-    });
-  }, [filtered]);
-
-  const tickerShare = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const r of filtered) {
-      map.set(
-        r.ticker,
-        (map.get(r.ticker) ?? 0) + r.distributionReceived
-      );
-    }
-    const total = [...map.values()].reduce((a, b) => a + b, 0) || 1;
-    const row: Record<string, number> = {};
-    for (const [ticker, v] of map.entries()) {
-      row[ticker] = Math.round((v / total) * 1000) / 10;
-    }
-    return [row];
-  }, [filtered]);
-
-  const monthlyNetVsTax = useMemo(() => {
-    const map = new Map<string, { total: number; taxAmount: number }>();
-    for (const r of filtered) {
-      const mk = monthKey(r.date);
-      const row = map.get(mk) ?? { total: 0, taxAmount: 0 };
-      row.total += r.total;
-      row.taxAmount += r.taxAmount;
-      map.set(mk, row);
-    }
-    return [...map.entries()]
-      .sort(([a], [b]) => (a < b ? -1 : 1))
-      .map(([month, v]) => ({ month, ...v }));
-  }, [filtered]);
-
   function openAdd() {
     setEditingId(null);
     setForm({ ...EMPTY_RECORD_FORM, date: localDateString() });
@@ -239,86 +120,36 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
 
   function openEdit(record: DistributionRecord) {
     setEditingId(record.id);
-    setForm({
-      ticker: record.ticker,
-      date: record.date,
-      quantity: String(record.quantity),
-      price: String(record.price),
-      distribution: String(record.distribution),
-      taxBase: String(record.taxBase),
-      held: record.held,
-    });
+    setForm(formFromRecord(record));
     setDialogOpen(true);
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("이 항목을 삭제할까요?")) return;
+  const pendingDelete = data.records.find((r) => r.id === pendingDeleteId);
+
+  async function handleDelete() {
+    if (!pendingDeleteId) return;
     await save({
       ...data,
-      records: data.records.filter((r) => r.id !== id),
+      records: data.records.filter((r) => r.id !== pendingDeleteId),
       updatedAt: new Date().toISOString(),
     });
+    setPendingDeleteId(null);
     toast.success("삭제되었습니다");
   }
 
   async function handleSubmit() {
-    if (!form.ticker.trim() || !form.date || form.quantity.trim() === "") {
-      toast.error("종목명·거래일·수량을 입력해주세요");
+    const result = buildRecordSubmission({ form, category, editingId, existing: data.records });
+    if (!result.ok) {
+      toast.error(result.message);
       return;
     }
-    const quantity = Number(form.quantity);
-    const price = form.price.trim() === "" ? 0 : Number(form.price);
-    const distribution = form.distribution.trim() === "" ? 0 : Number(form.distribution);
-    const taxBase = form.taxBase.trim() === "" ? 0 : Number(form.taxBase);
-    if (
-      !Number.isFinite(quantity) ||
-      quantity <= 0 ||
-      !Number.isFinite(price) ||
-      price < 0 ||
-      !Number.isFinite(distribution) ||
-      distribution < 0 ||
-      !Number.isFinite(taxBase) ||
-      taxBase < 0
-    ) {
-      toast.error("수량·현주가·분배금은 올바른 숫자여야 합니다");
-      return;
-    }
-    const amounts = computeDistributionAmounts(
-      { quantity, distribution, taxBase },
-      category
-    );
-    const recordId = editingId ?? crypto.randomUUID();
-    const draft: DistributionRecord = {
-      id: recordId,
-      ticker: form.ticker,
-      date: form.date,
-      quantity,
-      price,
-      distribution,
-      held: form.held,
-      priceChange: 0,
-      distributionChange: 0,
-      ...amounts,
-      taxBase,
-    };
-    const nextRecords = editingId
-      ? data.records.map((r) => (r.id === editingId ? draft : r))
-      : [...data.records, draft];
-    const record: DistributionRecord = {
-      ...draft,
-      priceChange: calcPriceChange(draft, nextRecords),
-      distributionChange: calcDistributionChange(draft, nextRecords),
-    };
-    const recordsWithChange = nextRecords.map((r) =>
-      r.id === record.id ? record : r
-    );
     await save({
       ...data,
-      records: recordsWithChange,
+      records: result.records,
       updatedAt: new Date().toISOString(),
     });
     setDialogOpen(false);
-    toast.success(editingId ? "수정되었습니다" : "추가되었습니다");
+    toast.success(result.isEdit ? "수정되었습니다" : "추가되었습니다");
   }
 
   async function confirmImport() {
@@ -345,111 +176,36 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
         <p className="text-sm text-muted-foreground">{subtitle}</p>
       </div>
 
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-3 pt-6">
-          <span className="text-sm font-medium text-muted-foreground">조회기간</span>
-          <Select
-            value={effectiveStart}
-            onValueChange={(v) => setStartMonth(v ?? "")}
-          >
-            <SelectTrigger size="sm">
-              <SelectValue placeholder="시작월" />
-            </SelectTrigger>
-            <SelectContent>
-              {months.map((m) => (
-                <SelectItem key={m} value={m}>
-                  {m}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <span>→</span>
-          <Select
-            value={effectiveEnd}
-            onValueChange={(v) => setEndMonth(v ?? "")}
-          >
-            <SelectTrigger size="sm">
-              <SelectValue placeholder="종료월" />
-            </SelectTrigger>
-            <SelectContent>
-              {months.map((m) => (
-                <SelectItem key={m} value={m}>
-                  {m}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
+      {loadError && <LoadErrorNotice />}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              주식수량 합계
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{totalQuantity.toLocaleString()} 주</p>
-            <p className="text-xs text-muted-foreground">* 종목별 최신 데이터 기준, 보유중인 종목만</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              평균 주식 단가 (가중평균)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{weightedAvgPrice.toLocaleString()} 원</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              분배금 합계
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{krw(distributionSum)}</p>
-          </CardContent>
-        </Card>
-      </div>
+      <DistributionPeriodFilter
+        months={months}
+        start={effectiveStart}
+        end={effectiveEnd}
+        onStartChange={setStartMonth}
+        onEndChange={setEndMonth}
+      />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() =>
-            csvTransfer.exportCsv(
-              data.records,
-              `${localDateString()}-${CATEGORY_LABEL[category]}_내보내기.csv`
-            )
-          }
-        >
-          <Download className="mr-1 h-4 w-4" /> 내보내기
-        </Button>
-        <Button variant="outline" size="sm" onClick={csvTransfer.pickImportFile} disabled={loading}>
-          <Upload className="mr-1 h-4 w-4" /> 가져오기
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => void cloudBackup.backup(data)} disabled={loading}>
-          <CloudUpload className="mr-1 h-4 w-4" /> 클라우드 백업
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => void cloudBackup.requestRestore()} disabled={loading}>
-          <CloudDownload className="mr-1 h-4 w-4" /> 클라우드 복원
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setResetDialogOpen(true)}
-          disabled={loading}
-        >
-          <RotateCcw className="mr-1 h-4 w-4" /> 초기화
-        </Button>
-        <Button size="sm" onClick={openAdd} className="ml-auto" disabled={loading}>
-          <Plus className="mr-1 h-4 w-4" /> 자산 추가
-        </Button>
-      </div>
+      <DistributionSummaryCards
+        totalQuantity={totalQuantity}
+        weightedAvgPrice={weightedAvgPrice}
+        distributionSum={distributionSum}
+      />
+
+      <DataToolbar
+        loading={loading || loadError}
+        onExport={() =>
+          csvTransfer.exportCsv(
+            data.records,
+            `${localDateString()}-${CATEGORY_LABEL[category]}_내보내기.csv`
+          )
+        }
+        onImport={csvTransfer.pickImportFile}
+        onBackup={() => void cloudBackup.backup(data)}
+        onRestore={() => void cloudBackup.requestRestore()}
+        onReset={() => setResetDialogOpen(true)}
+        onAdd={openAdd}
+      />
 
       <Input
         placeholder="자산 검색 (종목명)"
@@ -458,205 +214,24 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
         className="max-w-xs"
       />
 
-      <Card>
-        <CardContent className="overflow-x-auto pt-6">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>거래일</TableHead>
-                <TableHead>종목명</TableHead>
-                <TableHead>주식수량</TableHead>
-                <TableHead>현주가</TableHead>
-                <TableHead>주가등락</TableHead>
-                <TableHead>분배금</TableHead>
-                <TableHead>분배금등락</TableHead>
-                <TableHead>분배금총액</TableHead>
-                <TableHead>과세표준</TableHead>
-                <TableHead>과세분배액</TableHead>
-                <TableHead>과세금액</TableHead>
-                <TableHead>합계</TableHead>
-                <TableHead>상태</TableHead>
-                <TableHead className="text-right">관리</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {visible.map((r) => {
-                const { priceChange, distributionChange } = changeById.get(
-                  r.id
-                ) ?? { priceChange: 0, distributionChange: 0 };
-                return (
-                <TableRow key={r.id}>
-                  <TableCell>{r.date}</TableCell>
-                  <TableCell
-                    className={r.held ? "" : "text-muted-foreground line-through"}
-                  >
-                    {r.ticker}
-                  </TableCell>
-                  <TableCell>{r.quantity.toLocaleString()}</TableCell>
-                  <TableCell>{r.price.toLocaleString()}</TableCell>
-                  <TableCell
-                    className={
-                      priceChange > 0
-                        ? "text-rose-400"
-                        : priceChange < 0
-                          ? "text-sky-400"
-                          : "text-muted-foreground"
-                    }
-                  >
-                    {priceChange > 0 ? "+" : ""}
-                    {priceChange.toLocaleString()}
-                  </TableCell>
-                  <TableCell>{r.distribution.toLocaleString()}</TableCell>
-                  <TableCell
-                    className={
-                      distributionChange > 0
-                        ? "text-rose-400"
-                        : distributionChange < 0
-                          ? "text-sky-400"
-                          : "text-muted-foreground"
-                    }
-                  >
-                    {distributionChange > 0 ? "+" : ""}
-                    {distributionChange.toLocaleString()}
-                  </TableCell>
-                  <TableCell>{r.distributionReceived.toLocaleString()}</TableCell>
-                  <TableCell>{r.taxBase.toLocaleString()}</TableCell>
-                  <TableCell>{r.taxedDistribution.toLocaleString()}</TableCell>
-                  <TableCell>{r.taxAmount.toLocaleString()}</TableCell>
-                  <TableCell className="font-medium">
-                    {r.total.toLocaleString()}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={r.held ? "default" : "secondary"}>
-                      {r.held ? "보유" : "매도"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => openEdit(r)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => void handleDelete(r.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-                );
-              })}
-              {filtered.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={14} className="text-center text-muted-foreground">
-                    {loading ? "불러오는 중..." : "데이터가 없습니다"}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-          {visibleCount < filtered.length && (
-            <div className="flex justify-center pt-4">
-              <Button variant="outline" size="sm" onClick={showMore}>
-                더보기 ({visible.length} / {filtered.length})
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <DistributionTable
+        visible={visible}
+        totalCount={filtered.length}
+        visibleCount={visibleCount}
+        changeById={changeById}
+        loading={loading}
+        onShowMore={showMore}
+        onEdit={openEdit}
+        onDelete={setPendingDeleteId}
+      />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">월별 분배금 수령액 추이 (종목별)</CardTitle>
-          </CardHeader>
-          <CardContent className="h-72 w-full min-w-0">
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-              <BarChart data={monthlyByTicker}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" fontSize={11} />
-                <YAxis fontSize={11} />
-                <Tooltip />
-                <Legend />
-                {tickers.map((t, i) => (
-                  <Bar key={t} name={t} dataKey={(row) => row[t]} stackId="a" fill={colorForIndex(i)} />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">종목별 현주가 추이</CardTitle>
-          </CardHeader>
-          <CardContent className="h-72 w-full min-w-0">
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-              <LineChart data={priceTrend}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" fontSize={11} />
-                <YAxis fontSize={11} />
-                <Tooltip />
-                <Legend />
-                {tickers.map((t, i) => (
-                  <Line
-                    key={t}
-                    name={t}
-                    type="monotone"
-                    dataKey={(row) => row[t]}
-                    stroke={colorForIndex(i)}
-                    connectNulls
-                  />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">종목별 분배금 비중 (조회 기간 전체)</CardTitle>
-          </CardHeader>
-          <CardContent className="h-40 w-full min-w-0">
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-              <BarChart data={tickerShare} layout="vertical">
-                <XAxis type="number" hide domain={[0, 100]} />
-                <YAxis type="category" dataKey={() => ""} hide />
-                <Tooltip formatter={(v) => `${v}%`} />
-                <Legend />
-                {tickers.map((t, i) => (
-                  <Bar key={t} name={t} dataKey={(row) => row[t]} stackId="a" fill={colorForIndex(i)} />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">월별 순수령액 vs 과세금액</CardTitle>
-          </CardHeader>
-          <CardContent className="h-40 w-full min-w-0">
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-              <BarChart data={monthlyNetVsTax}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" fontSize={11} />
-                <YAxis fontSize={11} />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="total" name="순수령액" fill="#f5a524" />
-                <Bar dataKey="taxAmount" name="과세금액" fill="#f97316" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
+      <DistributionCharts
+        tickers={tickers}
+        monthlyByTicker={charts.monthlyByTicker}
+        priceTrend={charts.priceTrend}
+        tickerShare={charts.tickerShare}
+        monthlyNetVsTax={charts.monthlyNetVsTax}
+      />
 
       <RecordFormDialog
         open={dialogOpen}
@@ -667,7 +242,16 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
         tickerOptions={tickerSuggestions}
         onTickerChange={(ticker) => setForm((prev) => ({ ...prev, ticker }))}
         onTickerSelect={handleTickerSelect}
-        onSubmit={() => void handleSubmit()}
+        onSubmit={() => void runSafely(handleSubmit, MSG_SAVE_FAILED)}
+      />
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => !open && setPendingDeleteId(null)}
+        title="항목 삭제"
+        description={`${pendingDelete ? `${pendingDelete.ticker} · ${pendingDelete.date} 기록을 ` : "이 항목을 "}삭제합니다. 이 작업은 되돌릴 수 없습니다. 계속할까요?`}
+        confirmLabel="삭제"
+        onConfirm={() => void runSafely(handleDelete, MSG_SAVE_FAILED)}
       />
 
       <ConfirmDialog
@@ -676,7 +260,7 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
         title="전체 데이터 초기화"
         description={`${title}의 모든 분배금 기록이 삭제됩니다. 이 작업은 되돌릴 수 없습니다. 계속할까요?`}
         confirmLabel="초기화"
-        onConfirm={() => void handleReset()}
+        onConfirm={() => void runSafely(handleReset, MSG_SAVE_FAILED)}
       />
 
       <ConfirmDialog
@@ -685,7 +269,7 @@ export function DistributionAccountView({ category, title, subtitle }: Props) {
         title="가져오기 확인"
         description={`현재 ${data.records.length}건을 가져온 ${csvTransfer.pendingImport?.length ?? 0}건으로 교체합니다. 이 작업은 되돌릴 수 없습니다. 계속할까요?`}
         confirmLabel="가져오기"
-        onConfirm={() => void confirmImport()}
+        onConfirm={() => void runSafely(confirmImport, MSG_SAVE_FAILED)}
       />
 
       <ConfirmDialog
